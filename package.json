@@ -1,0 +1,42 @@
+{
+  "name": "garuda-store",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "web-panel"
+  ],
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,store,admin -c yellow,green,blue \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run dev -w web-panel\"",
+    "build": "tsc --noEmit -p tsconfig.json && npm run build --workspaces --if-present && node scripts/package-vercel.mjs",
+    "vercel-build": "npm run build",
+    "build:vercel": "npm run build",
+    "deploy": "npm run build && npx vercel --prod",
+    "test": "npm run test -w backend",
+    "start": "npm run start -w backend",
+    "seed": "npm run seed -w backend",
+    "create:admin": "npm run create:admin -w backend",
+    "upload:assets": "node --env-file=backend/.env scripts/upload-assets.mjs",
+    "test:browser": "node --env-file=backend/.env --import tsx scripts/browser-check.mjs",
+    "format": "prettier --write \"{backend,frontend,web-panel,shared,api,scripts}/**/*.{ts,tsx,css,mjs,json}\" \"*.{json,md}\" \"docs/*.md\""
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "mongodb": "^7.8.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "@vercel/blob": "^2.4.0",
+    "concurrently": "^9.2.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  }
+}

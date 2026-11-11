@@ -1,0 +1,6 @@
+node_modules
+dist
+**/dist
+frontend/public
+package-lock.json
+docs/screenshots

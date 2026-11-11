@@ -1,0 +1,544 @@
+/* One visual system for the rail and every shopping page. */
+.garuda-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f6faf9;
+  font:
+    800 27px/1 Arial,
+    sans-serif;
+  letter-spacing: -1px;
+}
+.garuda-brand svg {
+  width: 27px;
+  height: 31px;
+}
+.ref-entry > .garuda-brand {
+  font-size: 40px;
+  color: #ffc570;
+  gap: 12px;
+  margin-top: -45px;
+  margin-bottom: 33px;
+}
+.ref-entry > .garuda-brand svg {
+  width: 48px;
+  height: 58px;
+}
+/* Keep the entire campaign artwork inside the shared header, including on phones. */
+.store-header.ref-top {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 34vw) minmax(0, 1fr);
+  padding: 22px 28px 18px;
+  min-height: 190px;
+}
+.store-header .ref-brand {
+  width: 100%;
+  gap: 12px;
+  min-width: 0;
+}
+.store-header .ref-brand > img {
+  width: auto;
+  height: clamp(58px, 7vh, 82px);
+  object-fit: contain;
+}
+.store-header .ref-brand > p {
+  font-size: clamp(9px, 0.9vw, 13px);
+  letter-spacing: 0.24em;
+  line-height: 1.4;
+}
+.store-header .ref-champions {
+  font-size: clamp(32px, 3.6vw, 62px);
+  line-height: 1.12;
+  margin: 0;
+  white-space: nowrap;
+}
+.store-shell {
+  min-height: 100vh;
+  color: #f6faf9;
+  background-color: #140d09;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  font-family:
+    Reference Mono,
+    monospace;
+  padding-top: 205px;
+  padding-bottom: 70px;
+}
+.store-shell .ref-top {
+  position: fixed;
+  background: linear-gradient(#1a100be8, #1a100b80 65%, transparent);
+  padding-bottom: 22px;
+}
+.store-shell .ref-menu {
+  position: fixed;
+}
+.store-shell .ref-ticker {
+  position: fixed;
+  padding: 0;
+  border: 0;
+}
+.store-shell .section-wrap {
+  padding-top: 40px;
+}
+.store-shell h1,
+.store-shell h2,
+.store-shell h3 {
+  font-family: Arial, sans-serif;
+}
+.store-shell .eyebrow {
+  color: #e1b75f;
+  letter-spacing: 2px;
+}
+.store-shell .page-intro,
+.store-shell .empty-state p {
+  color: #e0d6c2a6;
+}
+.store-shell .section-wrap > h1 {
+  font-weight: 600;
+  font-size: 52px;
+  letter-spacing: -2px;
+}
+.store-shell .collection-card {
+  background: linear-gradient(150deg, #d7d6cb20, #24160f80) !important;
+  border: 1px solid #e6dfd266;
+  border-radius: 18px;
+  backdrop-filter: blur(15px);
+  box-shadow:
+    inset 0 1px 1px #fff6,
+    0 18px 50px #0005;
+}
+.store-shell .collection-card > div:last-child {
+  background: linear-gradient(transparent, #100807d9);
+}
+.store-shell .collection-card h2 {
+  color: #fff;
+}
+.store-shell .collection-card > div > span {
+  color: #ffc570;
+}
+.store-shell .catalog-tools {
+  border-color: #d7c9b533;
+  font-size: 11px;
+}
+.store-shell .catalog-tools > span {
+  color: #eee3cf8c;
+}
+.store-shell input,
+.store-shell select,
+.store-shell textarea {
+  background: #a78f6320;
+  border: 1px solid #ded4c059;
+  color: #f6faf9;
+  border-radius: 8px;
+  outline-color: #ffc570;
+}
+.store-shell input::placeholder,
+.store-shell textarea::placeholder {
+  color: #d6cab77a;
+}
+.store-shell select option {
+  background: #2a1c14;
+  color: #f6faf9;
+}
+.store-shell .search-field input {
+  background: transparent;
+  border: 0;
+}
+.store-shell .product-image {
+  background: linear-gradient(145deg, #c7bfa42e, #271a1659);
+  border: 1px solid #d9cfb952;
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 1px #fff4;
+}
+.store-shell .product-tag {
+  color: #f6faf9a6;
+}
+.store-shell .favorite {
+  color: #f3d5a5;
+}
+.store-shell .product-explore {
+  background: #1b110be6;
+  color: #ffc570;
+  border-top: 1px solid #c5a97d52;
+  backdrop-filter: blur(10px);
+}
+.store-shell .product-meta > span {
+  color: #ffc570;
+}
+.store-shell .product-meta p {
+  color: #e5d7be8c;
+}
+.store-shell .product-meta h3 {
+  font-size: 14px;
+}
+.store-shell .jersey-gk {
+  background:
+    repeating-linear-gradient(87deg, transparent 0 17px, #ffffff0a 18px, #00000008 20px),
+    radial-gradient(ellipse at 50% 30%, #1ca4b1, #08738c 65%, #034a5a);
+  color: #e0d6c2;
+}
+.store-shell .jersey-neck {
+  background: #241a12;
+}
+.store-shell .button {
+  background: linear-gradient(#bd9c6b2e, #4b2d1b40);
+  border: 1px solid #e5d8c48c;
+  border-radius: 30px;
+  color: #f6faf9;
+  box-shadow: inset 0 1px 1px #fff4;
+  font-family:
+    Reference Mono,
+    monospace;
+  font-size: 11px;
+}
+.store-shell .button:hover {
+  border-color: #ffc570;
+  background: #af7b333d;
+  color: #ffc570;
+}
+.store-shell .back-link {
+  color: #f1d8b1;
+}
+.store-shell .product-viewer {
+  background: radial-gradient(#a78b6038, #1a0c075e);
+  border: 1px solid #c3ab7d70;
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+.store-shell .product-viewer > p {
+  color: #e0ceacaa;
+}
+.store-shell .turn-button {
+  background: #33241dd9;
+  border: 1px solid #e7cf9d66;
+  border-radius: 30px;
+  color: #f5d7a4;
+}
+.store-shell .detail-price {
+  color: #ffc570;
+}
+.store-shell .detail-price span,
+.store-shell .detail-description,
+.store-shell .size-heading > span {
+  color: #e3d4bab3;
+}
+.store-shell .product-info {
+  background: linear-gradient(150deg, #c0b29b1a, #25120c40);
+  border: 1px solid #d4c0a342;
+  border-radius: 18px;
+  padding: 28px;
+  backdrop-filter: blur(12px);
+}
+.store-shell .stock-label {
+  color: #d5bc8f;
+}
+.store-shell .stock-label .live-dot {
+  background: #d9ab55;
+}
+.store-shell .sizes button {
+  border-color: #eadac15e;
+  border-radius: 6px;
+}
+.store-shell .sizes button.selected {
+  background: #c18d3c33;
+  border-color: #ffc570;
+  color: #ffc570;
+}
+.store-shell .outline-icon {
+  border-color: #ddc29b80;
+  border-radius: 50%;
+  color: #f2d3a0;
+}
+.store-shell .detail-benefits {
+  color: #d6c5a7aa;
+}
+.store-shell details {
+  border-color: #e3d4b93b;
+}
+.store-shell details p {
+  color: #daceb8ad;
+}
+.store-shell .product-detail {
+  gap: 4%;
+}
+.store-shell .product-info h1 {
+  font-size: 38px;
+}
+.store-shell .order-summary,
+.store-shell .checkout-form,
+.store-shell .contact-form,
+.store-shell .contact-success {
+  background: linear-gradient(145deg, #b9aa8f25, #321d1259);
+  border: 1px solid #dac7a366;
+  border-radius: 18px;
+  box-shadow: inset 0 1px 1px #fff4;
+  backdrop-filter: blur(16px);
+}
+.store-shell .checkout-form {
+  padding: 30px;
+}
+.store-shell .order-summary .summary-total {
+  border-color: #e4d6be40;
+}
+.store-shell .order-summary > p,
+.store-shell .order-summary small {
+  color: #d6c3a3a6;
+}
+.store-shell .order-summary > div > span:last-child,
+.store-shell .summary-total > strong:last-child {
+  color: #ffc570;
+}
+.store-shell .cart-item {
+  border-color: #e0cba633;
+}
+.store-shell .cart-item p {
+  color: #d4bea2a6;
+}
+.store-shell .cart-art {
+  background: #b2966529;
+  border: 1px solid #e0d0b24d;
+  border-radius: 12px;
+}
+.store-shell .quantity-control {
+  border-color: #c3ad8c80;
+  border-radius: 20px;
+}
+.store-shell .payment-choice {
+  border-color: #c6a96f70;
+  border-radius: 12px;
+  background: #87642f21;
+}
+.store-shell .payment-choice p,
+.store-shell .checkout-form > p {
+  color: #d6c9afaa;
+}
+.store-shell .selected-radio {
+  border-color: #422c19;
+  outline-color: #d4ac65;
+  background: #ffbd54;
+}
+.store-shell .form-grid label {
+  color: #e9dbc5;
+}
+.store-shell .contact-success {
+  padding: 30px;
+}
+.store-shell .contact-faq {
+  color: #fff;
+}
+.store-shell .error-message {
+  background: #741d2370;
+  border: 1px solid #ef7d7d60;
+  border-radius: 8px;
+  color: #ffc6c6 !important;
+}
+.store-shell .empty-state code {
+  background: #5f421b70;
+  color: #ffcf7e;
+  border-radius: 6px;
+}
+.store-shell .toast {
+  background: #2d1e14e8;
+  border: 1px solid #d3b6828c;
+  color: #f2dfc0;
+  bottom: 65px;
+  backdrop-filter: blur(12px);
+}
+.store-shell .section-heading > a,
+.store-shell .continue-link {
+  color: #eac68e;
+}
+.store-shell .viewer-fallback > p {
+  color: #e1cba4a6;
+}
+.store-shell .scene-loading {
+  color: #ecd0a6;
+}
+.store-shell .form-grid {
+  margin-top: 24px;
+}
+.store-shell .contact-layout {
+  gap: 7%;
+}
+.store-shell .success-state {
+  min-height: 60vh;
+}
+.store-shell .success-state > svg {
+  color: #ffd080;
+}
+.reference-home .ref-ticker {
+  padding: 0;
+  border: 0;
+}
+.ref-keyboard-rail:has(button:focus) ~ .ref-squad {
+  outline: none;
+}
+@media (max-width: 760px) {
+  .store-header.ref-top {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: 32px auto 36px;
+    gap: 8px;
+    padding: 12px 16px;
+    min-height: 224px;
+  }
+  .store-header .ref-logo {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .store-header .ref-controls {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .store-header .ref-brand {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 6px;
+  }
+  .store-header .ref-brand > img {
+    height: 48px;
+  }
+  .store-header .ref-brand > p {
+    font-size: 8px;
+  }
+  .store-header .ref-champions {
+    font-size: clamp(27px, 8vw, 34px);
+  }
+  .store-header .ref-filters {
+    position: absolute;
+    top: auto;
+    bottom: 10px;
+  }
+  .reference-home .ref-scene {
+    top: 60px;
+  }
+  .garuda-brand {
+    font-size: 20px;
+    gap: 5px;
+  }
+  .garuda-brand svg {
+    width: 21px;
+    height: 25px;
+  }
+  .store-shell {
+    padding-top: 230px;
+    padding-bottom: 55px;
+  }
+  .store-shell .ref-top {
+    padding-bottom: 12px;
+    background: linear-gradient(#1a100bf2, #1a100bc9 80%, transparent);
+  }
+  .store-shell .section-wrap {
+    padding-top: 25px;
+  }
+  .store-shell .section-wrap > h1 {
+    font-size: 36px;
+  }
+  .store-shell .product-meta h3 {
+    font-size: 12px;
+  }
+  .store-shell .product-info {
+    padding: 24px;
+  }
+  .store-shell .product-info h1 {
+    font-size: 33px;
+  }
+  .store-shell .checkout-form {
+    padding: 22px;
+  }
+  .store-shell .order-summary {
+    padding: 25px;
+  }
+  .store-shell .contact-form {
+    padding: 24px;
+  }
+  .store-shell .product-viewer {
+    height: 420px;
+  }
+  .store-shell .product-detail {
+    gap: 25px;
+  }
+  .store-shell .search-field input {
+    font-size: 11px;
+  }
+  .store-shell .page-intro {
+    font-size: 12px;
+  }
+  .ref-entry > .garuda-brand {
+    font-size: 32px;
+  }
+  .ref-entry > .garuda-brand svg {
+    width: 39px;
+    height: 47px;
+  }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+  .store-header.ref-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 32px auto 36px;
+    gap: 8px;
+    padding: 12px 16px;
+    min-height: 224px;
+  }
+  .store-header .ref-logo {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .store-header .ref-controls {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .store-header .ref-brand {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 6px;
+  }
+  .store-header .ref-brand > img {
+    height: 48px;
+  }
+  .store-header .ref-brand > p {
+    font-size: 8px;
+  }
+  .store-header .ref-champions {
+    font-size: clamp(27px, 5vw, 34px);
+  }
+  .store-header .ref-filters {
+    position: absolute;
+    top: auto;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .store-shell {
+    min-height: 100svh;
+    padding-top: 230px;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .store-header.ref-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 34px 36px;
+    gap: 4px;
+    padding: 8px 14px;
+    min-height: 86px;
+  }
+  .store-header .ref-brand {
+    display: none;
+  }
+  .store-header .ref-controls {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .store-header .ref-filters {
+    position: absolute;
+    top: auto;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .store-shell {
+    min-height: 100svh;
+    padding-top: 100px;
+  }
+}
