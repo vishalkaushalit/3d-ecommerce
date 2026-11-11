@@ -73,7 +73,7 @@ export function ReferenceHomePage() {
         .sort(
           (a, b) =>
             ['GK', 'DEF', 'MID', 'FWD'].indexOf(a.position) -
-              ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) ||
+            ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) ||
             Number(a.number) - Number(b.number),
         ),
     [products],
@@ -87,7 +87,7 @@ export function ReferenceHomePage() {
     const ordered = [...railProducts].sort(
       (a, b) =>
         ['GK', 'DEF', 'MID', 'FWD'].indexOf(a.position) -
-          ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) || Number(a.number) - Number(b.number),
+        ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) || Number(a.number) - Number(b.number),
     );
     const index = ordered.findIndex((product) => product.id === selected.id);
     onSelect(ordered[(index + direction + ordered.length) % ordered.length]);
@@ -263,11 +263,11 @@ export function ReferenceHomePage() {
                     'Born',
                     reference
                       ? new Date(reference.born).toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          timeZone: 'UTC',
-                        })
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        timeZone: 'UTC',
+                      })
                       : '—',
                   ],
                   ['Birthplace', reference?.birthplace || '—'],
