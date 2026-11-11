@@ -237,6 +237,15 @@ function HangingJersey({
   );
 }
 
+function getInterGroupGap(posA: string, posB: string, isMobile: boolean): number {
+  if (posA === posB) return 0;
+  // Center gap between DEF and MID is the widest, leaving space around the center pillar
+  if ((posA === 'DEF' && posB === 'MID') || (posA === 'MID' && posB === 'DEF')) {
+    return isMobile ? 0.36 : 0.28;
+  }
+  return isMobile ? 0.24 : 0.16;
+}
+
 function Scene({
   products,
   filter,
@@ -267,8 +276,8 @@ function Scene({
   const groupCount = new Set(sorted.map((product) => product.position)).size;
   const halfWidth = isMobile
     ? Math.max(
-        1.68,
-        ((sorted.length - 1) * mobileSpacing + Math.max(0, groupCount - 1) * 0.025) / 2 + 0.15,
+        1.75,
+        ((sorted.length - 1) * mobileSpacing + Math.max(0, groupCount - 1) * 0.28) / 2 + 0.2,
       )
     : Math.min(1.7, worldWidth / 2 - 0.14);
   const bounds: RailBounds = {
@@ -277,21 +286,44 @@ function Scene({
     gap: Math.min(0.065, (halfWidth * 2 - 0.78) / Math.max(1, sorted.length - 3)),
   };
   const initialPositions = useMemo(() => {
-    const groupGap = 0.025;
-    const spacing = Math.min(
-      isMobile ? mobileSpacing : 0.16,
-      (halfWidth * 2 - 0.12 - (groupCount - 1) * groupGap) / Math.max(1, sorted.length - 1),
-    );
+    if (!sorted.length) return [];
+    if (groupCount <= 1) {
+      const spacing = isMobile
+        ? mobileSpacing
+        : Math.min(0.14, 2.2 / Math.max(1, sorted.length - 1));
+      const totalWidth = (sorted.length - 1) * spacing;
+      return sorted.map((_, i) => i * spacing - totalWidth / 2);
+    }
+
+    const spacing = isMobile ? 0.15 : 0.088;
+    const result: number[] = [];
     let cursor = 0;
-    const result = sorted.map((product, index) => {
-      if (index && sorted[index - 1].position !== product.position) cursor += groupGap;
-      const x = cursor;
-      cursor += spacing;
-      return x;
+    sorted.forEach((product, index) => {
+      if (index > 0) {
+        const prev = sorted[index - 1];
+        if (prev.position !== product.position) {
+          cursor += getInterGroupGap(prev.position, product.position, isMobile);
+        } else {
+          cursor += spacing;
+        }
+      }
+      result.push(cursor);
     });
-    const center = (cursor - spacing) / 2;
+
+    let defLastIndex = -1;
+    let midFirstIndex = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].position === 'DEF') defLastIndex = i;
+      if (sorted[i].position === 'MID' && midFirstIndex === -1) midFirstIndex = i;
+    }
+
+    const center =
+      defLastIndex !== -1 && midFirstIndex !== -1
+        ? (result[defLastIndex] + result[midFirstIndex]) / 2
+        : (result[0] + result[result.length - 1]) / 2;
+
     return result.map((x) => x - center);
-  }, [visibleIds, halfWidth, isMobile, mobileSpacing, groupCount]);
+  }, [visibleIds, isMobile, mobileSpacing, groupCount]);
   const [railPositions, setRailPositions] = useState(initialPositions);
   const [dragging, setDragging] = useState(false);
   const railGroup = useRef<Group>(null);
@@ -349,6 +381,7 @@ function Scene({
     !selected && !dragging ? sorted.findIndex((product) => product.id === hovered?.id) : -1;
   const displayPositions = openJerseyGap(validPositions, hoveredIndex, bounds);
   useEffect(() => {
+    if (drag.current) return;
     setRailPositions(initialPositions);
     railTargetOffset.current = 0;
     railMomentum.current = 0;
@@ -502,6 +535,15 @@ function Scene({
               </Html>
             );
           })}
+        {!selected && filter === 'ALL' && (
+          <Html
+            position={[0, 2.04, 0]}
+            center
+            style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}
+          >
+            <div className="ref-rail-champions">CHAMPIONS</div>
+          </Html>
+        )}
       </group>
     </>
   );

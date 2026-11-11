@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { StoreHeader, StoreFooter, GarudaBrand } from '../components/StoreChrome';
 import {
@@ -66,13 +66,18 @@ export function ReferenceHomePage() {
     setRotation(0);
     if (product) setSize(product.sizes.includes('M') ? 'M' : product.sizes[0]);
   }, []);
-  const railProducts = products
-    .filter((product) => product.featured)
-    .sort(
-      (a, b) =>
-        ['GK', 'DEF', 'MID', 'FWD'].indexOf(a.position) -
-          ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) || Number(a.number) - Number(b.number),
-    );
+  const railProducts = useMemo(
+    () =>
+      products
+        .filter((product) => product.featured)
+        .sort(
+          (a, b) =>
+            ['GK', 'DEF', 'MID', 'FWD'].indexOf(a.position) -
+              ['GK', 'DEF', 'MID', 'FWD'].indexOf(b.position) ||
+            Number(a.number) - Number(b.number),
+        ),
+    [products],
+  );
   const reference =
     selected && referencePlayers[selected.number]?.shirt === selected.player
       ? referencePlayers[selected.number]

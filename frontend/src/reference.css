@@ -247,6 +247,31 @@
   height: 1px;
   background: #f6faf940;
 }
+.ref-rail-champions {
+  font-family: Arial, sans-serif;
+  font-weight: 1000;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  color: #f7f6f1;
+  background: linear-gradient(
+    175deg,
+    #fff 5%,
+    #d7e0e0 28%,
+    #fff 42%,
+    #8d9797 48%,
+    #fff 56%,
+    #ffd46c 66%,
+    #fff 74%
+  );
+  background-size: 100% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 #bc7c12) drop-shadow(0 3px 2px #0009);
+  animation: ref-shine 7s ease-in-out infinite;
+  text-transform: uppercase;
+}
 .ref-hint {
   position: absolute;
   bottom: 74px;
