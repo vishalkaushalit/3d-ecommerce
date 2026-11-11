@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, RotateCcw, ArrowUpRight } from 'lucide-react';
+import { Menu, X, RotateCcw, ArrowUpRight, ShoppingBag } from 'lucide-react';
 import { useStore } from '../StoreContext';
-
-const referenceAsset = (file: string) =>
-  `${(import.meta.env.VITE_ASSET_BASE_URL || '/assets').replace(/\/$/, '')}/reference/${file}`;
 
 export function GarudaBrand() {
   return (
@@ -54,23 +51,13 @@ export function StoreHeader({
     return () => window.removeEventListener('keydown', close);
   }, []);
   const railProducts = products.filter((product) => product.featured);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   return (
     <>
       <header className="ref-top store-header">
         <Link to="/" className="ref-logo" aria-label="GARUDA home">
           <GarudaBrand />
         </Link>
-        <div
-          className="ref-brand"
-          role="img"
-          aria-label="Terima kasih Timnas Indonesia. FIFA ASEAN Cup 2026 champions."
-        >
-          <img src={referenceAsset('title.webp')} alt="Terima kasih Timnas Indonesia" />
-          <p>
-            FIFA ASEAN Cup 2026<sup>™</sup>
-          </p>
-          <div className="ref-champions">CHAMPIONS</div>
-        </div>
         <div className="ref-controls">
           <div className="ref-filters" role="group" aria-label="Show on the rail">
             {['ALL', 'GK', 'DEF', 'MID', 'FWD'].map((position) => (
@@ -101,6 +88,15 @@ export function StoreHeader({
           >
             <RotateCcw size={21} />
           </button>
+          <Link
+            to="/cart"
+            className="ref-round ref-cart-btn"
+            aria-label={`Shopping bag (${cartCount} items)`}
+            title="Shopping bag"
+          >
+            <ShoppingBag size={21} />
+            <span className="ref-cart-badge">{cartCount}</span>
+          </Link>
           <button
             className="ref-round"
             aria-label={menu ? 'Close menu' : 'Open menu'}

@@ -45,9 +45,9 @@
 .ref-top {
   position: absolute;
   inset: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 22px 36px 0;
   pointer-events: none;
   z-index: 5;
@@ -146,6 +146,31 @@
 .ref-round:hover {
   color: #fff;
   background: #ba97604a;
+}
+.ref-cart-btn {
+  position: relative;
+  text-decoration: none;
+}
+.ref-cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: #a8282d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 .ref-filters {
   display: flex;
@@ -863,7 +888,9 @@
 @media (max-width: 760px) {
   .ref-top {
     padding: 17px 18px;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   .ref-logo {
     gap: 5px;

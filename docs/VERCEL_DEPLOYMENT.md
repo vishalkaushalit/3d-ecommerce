@@ -36,14 +36,14 @@ Push the source to your Git provider, including `package-lock.json`, `vercel.jso
 
 In Vercel choose **Add New → Project**, import the repository, and use:
 
-| Setting          | Value                                            |
-| ---------------- | ------------------------------------------------ |
-| Root Directory   | Repository root (`./`)                           |
-| Framework Preset | Other / Vite (`vercel.json` provides overrides)  |
-| Node.js Version  | 22.x                                             |
-| Install Command  | `npm install` (`vercel.json` configures this)    |
-| Build Command    | `npm run build` (`vercel.json` configures this)  |
-| Output Directory | `dist` (`vercel.json` configures this)           |
+| Setting          | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| Root Directory   | Repository root (`./`)                          |
+| Framework Preset | Other / Vite (`vercel.json` provides overrides) |
+| Node.js Version  | 22.x                                            |
+| Install Command  | `npm install` (`vercel.json` configures this)   |
+| Build Command    | `npm run build` (`vercel.json` configures this) |
+| Output Directory | `dist` (`vercel.json` configures this)          |
 
 With `vercel.json` configured, Vercel will automatically run `npm run build` (via `buildCommand` and the `vercel-build` npm script), packaging both frontends and the backend into `dist`. You can also trigger deployments directly with `npm run deploy` if using the Vercel CLI.
 
