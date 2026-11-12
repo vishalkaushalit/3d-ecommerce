@@ -61,7 +61,7 @@ function LoadingProgress({ onProgress }: { onProgress: (progress: number) => voi
   return null;
 }
 
-function RoomLighting({ selected }: { selected: boolean }) {
+function RoomLighting({ selected, shadowsEnabled }: { selected: boolean; shadowsEnabled: boolean }) {
   const key = useRef<SpotLight>(null);
   const fillLight = useRef<SpotLight>(null);
   const { size } = useThree();
@@ -78,7 +78,7 @@ function RoomLighting({ selected }: { selected: boolean }) {
       const light = new SpotLight(16771798, 11, 9, MathUtils.degToRad(spot.cone / 2), spot.blend, 2);
       light.position.set(spot.pos[0], spot.pos[2], -spot.pos[1]);
       light.target.position.set(spot.target[0], spot.target[2], -spot.target[1]);
-      light.castShadow = index % 2 === 0;
+      light.castShadow = shadowsEnabled && index % 2 === 0;
       light.shadow.mapSize.set(1536, 1536);
       light.shadow.bias = -0.0004;
       light.shadow.normalBias = 0.01;
@@ -92,7 +92,7 @@ function RoomLighting({ selected }: { selected: boolean }) {
     fill.target.position.set(-0.4, 1.5, 0);
     group.add(fill, fill.target);
     return group;
-  }, []);
+  }, [shadowsEnabled]);
   const room = useMemo(() => {
     const model = scene.clone(true);
     const dark = new ShadowMaterial({ color: 0, opacity: 0.5 });
@@ -485,8 +485,8 @@ function Scene({
     }
   }, [selected]);
   useEffect(() => {
-    onReady();
-  }, [onReady]);
+    if (sorted.length) onReady();
+  }, [onReady, sorted.length]);
   function startDrag(id: string) {
     const index = sorted.findIndex((product) => product.id === id);
     const mobile = size.width <= 760;
@@ -570,7 +570,7 @@ function Scene({
   return (
     <>
       <ReferenceCamera />
-      <RoomLighting selected={Boolean(selected)} />
+      <RoomLighting selected={Boolean(selected)} shadowsEnabled={sorted.length > 0} />
       <group ref={railGroup}>
         {sorted.map((product, index) => (
           <HangingJersey

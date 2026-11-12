@@ -11,27 +11,22 @@ app.disable('x-powered-by');
 if (process.env.VERCEL) app.set('trust proxy', 1);
 app.use('/api/admin/products', requireAdmin, express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '64kb' }));
-const defaultAllowedOrigins = [
-  'http://127.0.0.1:5173',
-  'http://localhost:5173',
-  'http://127.0.0.1:5174',
-  'http://localhost:5174',
-  'http://127.0.0.1:4000',
-  'http://localhost:4000',
-  'https://3d-ecommerce-one.vercel.app',
-];
 const allowedOrigins = new Set(
-  (process.env.ALLOWED_ORIGINS || defaultAllowedOrigins.join(','))
+  (process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
 );
+const isLocalOrigin = (origin: string) =>
+  process.env.NODE_ENV !== 'production' &&
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/.test(origin);
 app.use('/api', (request, response, next) => {
   response.set('Cache-Control', 'no-store');
   response.set('X-Content-Type-Options', 'nosniff');
   if (
     !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
     request.headers.origin &&
+    !isLocalOrigin(request.headers.origin) &&
     !allowedOrigins.has(request.headers.origin) &&
     request.headers.origin !== `https://${request.headers.host}`
   ) {

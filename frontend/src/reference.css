@@ -526,6 +526,10 @@
   background: #ae76332e;
   color: #ffce7b;
 }
+.ref-entry-buttons > button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
 .ref-entry > small {
   font-size: 8px;
   letter-spacing: 2px;

@@ -447,7 +447,7 @@ export function ReferenceHomePage() {
         </div>
       )}
 
-      {!entered && (
+      {(!ready || !entered) && (
         <div className="ref-entry">
           <GarudaBrand />
           <p>INTERACTIVE 3D LOCKER ROOM</p>
@@ -461,10 +461,10 @@ export function ReferenceHomePage() {
             </div>
           </div>
           <div className="ref-entry-buttons">
-            <button onClick={() => enterRoom(true)}>
+            <button disabled={!ready} onClick={() => enterRoom(true)}>
               <Volume2 size={17} /> ENTER WITH SOUND
             </button>
-            <button onClick={() => enterRoom(false)}>
+            <button disabled={!ready} onClick={() => enterRoom(false)}>
               <VolumeX size={17} /> MUTED
             </button>
           </div>
