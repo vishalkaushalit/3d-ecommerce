@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host localhost",
+    "dev": "vite --host localhost --port 5174",
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
