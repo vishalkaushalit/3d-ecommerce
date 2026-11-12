@@ -499,8 +499,13 @@ svg {
     radial-gradient(ellipse at 50% 30%, #f2e28c, #c0a441 65%, #a48723);
   color: #353828;
 }
-.uploaded-jersey-art {
-  object-fit: fill;
+/* An uploaded design is shown as-is: no kit colour behind its transparent
+   areas, no jersey-shaped clip, no stretching. */
+.uploaded-jersey-art,
+.uploaded-jersey-art.jersey-gk {
+  background: none;
+  clip-path: none;
+  object-fit: contain;
 }
 .jersey-neck {
   position: absolute;

@@ -324,20 +324,22 @@ function Scene({
   hovered,
 }: SceneProps) {
   const { size, gl, camera } = useThree();
+  const isMobile = size.width <= 760; // same breakpoint as the page CSS (max-width: 760px)
+  // As on Garuda, a phone keeps the whole squad on the rail: a position tab
+  // moves the camera along the rail to that group instead of hiding shirts.
   const sorted = useMemo(
     () =>
       [...products]
-        .filter((product) => filter === 'ALL' || product.position === filter)
+        .filter((product) => isMobile || filter === 'ALL' || product.position === filter)
         .sort(
           (a, b) =>
             positions.indexOf(a.position) - positions.indexOf(b.position) ||
             Number(a.number) - Number(b.number),
         ),
-    [products, filter],
+    [products, filter, isMobile],
   );
   const visibleIds = sorted.map((product) => product.id).join(',');
   const worldWidth = (2 * Math.tan(((19.5 / 2) * Math.PI) / 180) * 5.6 * size.width) / size.height;
-  const isMobile = size.width <= 760; // same breakpoint as the page CSS (max-width: 760px)
   const groupCount = new Set(sorted.map((product) => product.position)).size;
   const halfWidth = isMobile ? RAIL_HALF : worldWidth / 2 - 0.14;
   const initialPositions = useMemo(() => {
@@ -479,11 +481,15 @@ function Scene({
     }
     view.current.pan = 0;
     view.current.focus = -1;
-    let middle = 0;
-    initialPositions.forEach((x, index) => {
-      if (Math.abs(x) < Math.abs(initialPositions[middle])) middle = index;
-    });
-    tick.current.focus(middle);
+    // Start on the chosen group's first shirt (GK by default), else the middle of the rail.
+    let start = filter === 'ALL' ? -1 : sorted.findIndex((product) => product.position === filter);
+    if (start < 0) {
+      start = 0;
+      initialPositions.forEach((x, index) => {
+        if (Math.abs(x) < Math.abs(initialPositions[start])) start = index;
+      });
+    }
+    tick.current.focus(start);
     // Only when the shirt set or the layout mode changes, not on every resize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim, isMobile, reset]);

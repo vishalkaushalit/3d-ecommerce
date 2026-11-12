@@ -55,6 +55,8 @@ export function ReferenceHomePage() {
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
+  // Phones have no ALL tab: the rail opens on the goalkeepers instead.
+  const railFilter = isPhone && filter === 'ALL' ? 'GK' : filter;
   const browsing = isPhone && !selected && hovered ? hovered : null;
   const current = selected ?? browsing;
   useEffect(() => {
@@ -88,6 +90,10 @@ export function ReferenceHomePage() {
         ),
     [products],
   );
+  // Phones show the whole squad on the rail; elsewhere the tab filters it.
+  const shownProducts = isPhone
+    ? railProducts
+    : railProducts.filter((product) => railFilter === 'ALL' || product.position === railFilter);
   const reference =
     selected && referencePlayers[selected.number]?.shirt === selected.player
       ? referencePlayers[selected.number]
@@ -171,7 +177,7 @@ export function ReferenceHomePage() {
         <Suspense fallback={null}>
           <ReferenceScene
             products={railProducts}
-            filter={filter}
+            filter={railFilter}
             selected={selected}
             onSelect={onSelect}
             onHover={setHovered}
@@ -184,11 +190,13 @@ export function ReferenceHomePage() {
         </Suspense>
       </div>
       <StoreHeader
-        filter={filter}
+        filter={railFilter}
         selectedPosition={current?.position}
         onFilter={(position) => {
           setFilter(position);
           setSelected(null);
+          // On a phone the rail glides to the group's first shirt, as on Garuda.
+          if (isPhone) setHovered(railProducts.find((product) => product.position === position) ?? null);
         }}
         onReset={() => {
           setFilter('ALL');
@@ -428,8 +436,7 @@ export function ReferenceHomePage() {
         </aside>
       )}
       <div className="ref-keyboard-rail" aria-label="Choose a jersey">
-        {railProducts
-          .filter((product) => filter === 'ALL' || product.position === filter)
+        {shownProducts
           .map((product) => (
             <button
               key={product.id}
@@ -442,8 +449,7 @@ export function ReferenceHomePage() {
           ))}
       </div>
       <div ref={mobilePlayers} className="ref-mobile-players" aria-label="Browse all players">
-        {railProducts
-          .filter((product) => filter === 'ALL' || product.position === filter)
+        {shownProducts
           .map((product) => (
             <button
               key={product.id}

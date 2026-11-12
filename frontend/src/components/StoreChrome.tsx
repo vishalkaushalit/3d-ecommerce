@@ -38,6 +38,14 @@ export function StoreHeader({
 }) {
   const { products, wishlist, cart } = useStore();
   const [menu, setMenu] = useState(false);
+  // Phones have no ALL tab; the rail opens on GK instead.
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 760px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)');
+    const update = () => setIsPhone(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const navigate = useNavigate();
   const location = useLocation();
   useEffect(() => {
@@ -60,7 +68,7 @@ export function StoreHeader({
         </Link>
         <div className="ref-controls">
           <div className="ref-filters" role="group" aria-label="Show on the rail">
-            {['ALL', 'GK', 'DEF', 'MID', 'FWD'].map((position) => (
+            {(isPhone ? ['GK', 'DEF', 'MID', 'FWD'] : ['ALL', 'GK', 'DEF', 'MID', 'FWD']).map((position) => (
               <button
                 key={position}
                 aria-pressed={filter === position}

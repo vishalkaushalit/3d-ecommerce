@@ -364,6 +364,20 @@
     padding: 12px 16px;
     min-height: 64px;
   }
+  /* Shop pages: as on the homepage, the position tabs get their own centred
+     row under the logo and buttons instead of sitting on top of the logo. */
+  .store-shell .store-header.ref-top {
+    align-items: flex-start;
+    min-height: 116px;
+  }
+  .store-shell .store-header .ref-filters {
+    position: absolute;
+    top: auto;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 24px);
+  }
   .store-header .ref-filters {
     position: absolute;
     top: auto;
@@ -381,7 +395,7 @@
     height: 25px;
   }
   .store-shell {
-    padding-top: 86px;
+    padding-top: 132px;
     padding-bottom: 55px;
   }
   .store-shell .ref-top {

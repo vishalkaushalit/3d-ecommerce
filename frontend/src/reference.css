@@ -211,6 +211,12 @@
     inset 0 1px 1px #fffd,
     0 0 0 1px #ffc5708c;
 }
+/* No red site-wide focus ring on the tabs: the gold ring matches the bar and
+   still shows keyboard focus. */
+.ref-filters button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px #ffc5708c;
+}
 .ref-filters button.active sup {
   color: #ffc570;
 }
@@ -1282,7 +1288,7 @@
   .reference-home:is(.ref-detail, .ref-browse) {
     --dock-button: clamp(36px, 9vw, 64px);
     --dock-gap: 10px;
-    --dock-bar: min(370px, calc(100vw - 24px - var(--dock-gap) - var(--dock-button)));
+    --dock-bar: min(300px, calc(100vw - 24px - var(--dock-gap) - var(--dock-button)));
     --dock-left: calc((100vw - var(--dock-bar) - var(--dock-gap) - var(--dock-button)) / 2);
   }
   .reference-home:is(.ref-detail, .ref-browse) .store-header .ref-filters {
@@ -1366,9 +1372,9 @@
     font-size: 12px;
   }
   :is(.ref-detail, .ref-browse) .ref-filters button {
-    padding: 17px 16px;
-    font-size: 14px;
-    letter-spacing: 1.4px;
+    padding: 13px 11px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
   }
   :is(.ref-detail, .ref-browse) .ref-mobile-credit {
     font-size: 12px;

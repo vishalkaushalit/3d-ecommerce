@@ -10,7 +10,6 @@ export function JerseyArtwork({ product, back = false }: { product: Product; bac
       <img
         className={`jersey-art uploaded-jersey-art ${product.kit === 'gk' ? 'jersey-gk' : ''}`}
         src={uploadedDesign}
-        style={{ background: product.color }}
         alt={`${product.name}, uploaded ${back ? 'back' : 'front'} artwork`}
       />
     );
