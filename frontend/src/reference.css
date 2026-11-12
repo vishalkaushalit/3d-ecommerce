@@ -1070,10 +1070,10 @@
     padding-top: 8px;
     border-top: 1px solid #c7bca8;
   }
-  .ref-detail .ref-hint {
+  :is(.ref-detail, .ref-browse) .ref-hint {
     display: none;
   }
-  .ref-detail .ref-sound {
+  :is(.ref-detail, .ref-browse) .ref-sound {
     display: none;
   }
   .ref-entry-logo {
@@ -1179,15 +1179,19 @@
   }
 }
 @media (max-width: 760px) {
+  main.reference-home .ref-scene {
+    top: 0;
+  }
   .reference-home.ref-detail::after {
     opacity: 0.1;
   }
   .ref-detail .ref-brand {
     opacity: 1;
   }
-  .ref-detail .ref-player-label {
+  :is(.ref-detail, .ref-browse) .ref-player-label {
     position: fixed;
-    bottom: clamp(170px, 20vh, 245px);
+    /* Garuda stack: label sits just above the number strip, below the shirt hem. */
+    bottom: calc(clamp(124px, 20vh, 170px) + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     display: grid;
@@ -1203,14 +1207,14 @@
     white-space: nowrap;
     text-shadow: 0 2px 6px #000;
   }
-  .ref-detail .ref-player-label strong {
+  :is(.ref-detail, .ref-browse) .ref-player-label strong {
     color: var(--ref-gold);
     font:
       700 clamp(22px, 4vw, 32px)/1 Arial,
       sans-serif;
     letter-spacing: 0;
   }
-  .ref-detail .ref-player-label .ref-selected-name {
+  :is(.ref-detail, .ref-browse) .ref-player-label .ref-selected-name {
     color: var(--ref-white);
     font:
       700 clamp(22px, 4vw, 32px)/1.15 Arial,
@@ -1218,7 +1222,7 @@
     letter-spacing: -0.8px;
     text-transform: none;
   }
-  .ref-detail .ref-player-label .ref-selected-hint {
+  :is(.ref-detail, .ref-browse) .ref-player-label .ref-selected-hint {
     grid-column: 1 / -1;
     margin-top: 7px;
     color: #f6faf9a6;
@@ -1226,11 +1230,11 @@
     font-weight: 600;
     letter-spacing: 2px;
   }
-  .ref-detail .ref-mobile-players {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players {
     position: fixed;
     left: 5%;
     right: 5%;
-    bottom: calc(165px + env(safe-area-inset-bottom));
+    bottom: calc(clamp(84px, 13.5vh, 120px) + env(safe-area-inset-bottom));
     display: flex;
     justify-content: flex-start;
     overflow-x: auto;
@@ -1242,10 +1246,10 @@
     z-index: 6;
     scrollbar-width: none;
   }
-  .ref-detail .ref-mobile-players::-webkit-scrollbar {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players::-webkit-scrollbar {
     display: none;
   }
-  .ref-detail .ref-mobile-players button {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players button {
     position: relative;
     flex: 0 0 auto;
     min-width: 20px;
@@ -1261,11 +1265,11 @@
       monospace;
     scroll-snap-align: center;
   }
-  .ref-detail .ref-mobile-players button.active {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players button.active {
     color: var(--ref-gold);
     font-size: 18px;
   }
-  .ref-detail .ref-mobile-players button.active::after {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players button.active::after {
     content: '';
     position: absolute;
     left: 15%;
@@ -1274,58 +1278,67 @@
     height: 2px;
     background: var(--ref-gold);
   }
-  .reference-home.ref-detail .store-header .ref-filters {
+  /* Filter bar + round button laid out side by side, centered as one group, never overlapping. */
+  .reference-home:is(.ref-detail, .ref-browse) {
+    --dock-button: clamp(36px, 9vw, 64px);
+    --dock-gap: 10px;
+    --dock-bar: min(370px, calc(100vw - 24px - var(--dock-gap) - var(--dock-button)));
+    --dock-left: calc((100vw - var(--dock-bar) - var(--dock-gap) - var(--dock-button)) / 2);
+  }
+  .reference-home:is(.ref-detail, .ref-browse) .store-header .ref-filters {
     position: fixed;
     top: auto;
-    left: 50%;
-    bottom: calc(77px + env(safe-area-inset-bottom));
-    width: min(370px, calc(100vw - 120px));
+    right: auto;
+    left: var(--dock-left);
+    bottom: calc(clamp(38px, 6.5vh, 60px) + env(safe-area-inset-bottom));
+    width: var(--dock-bar);
     justify-content: space-between;
-    transform: translateX(-50%);
+    transform: none;
     z-index: 8;
   }
-  .ref-detail .ref-filters button.active:not([data-selected-position='true']) {
+  :is(.ref-detail, .ref-browse) .ref-filters button.active:not([data-selected-position='true']) {
     color: #f6faf961;
     background: transparent;
     box-shadow: none;
   }
-  .ref-detail .ref-filters button.active:not([data-selected-position='true'])::after {
+  :is(.ref-detail, .ref-browse) .ref-filters button.active:not([data-selected-position='true'])::after {
     display: none;
   }
-  .ref-detail .ref-filters button[data-selected-position='true'] {
+  :is(.ref-detail, .ref-browse) .ref-filters button[data-selected-position='true'] {
     color: #fff;
     background: linear-gradient(160deg, #d7c6aa5c, #5f4e3966);
     box-shadow:
       inset 0 1px 1px #fffd,
       0 0 0 1px #ffc5708c;
   }
-  .ref-detail .ref-filters button[data-selected-position='true']::after {
+  :is(.ref-detail, .ref-browse) .ref-filters button[data-selected-position='true']::after {
     display: block;
   }
-  .reference-home.ref-detail .store-header .ref-controls > .ref-round:first-of-type {
+  .reference-home:is(.ref-detail, .ref-browse) .store-header .ref-controls > .ref-round:first-of-type {
     position: fixed;
-    left: calc(50% + min(220px, 38vw));
-    bottom: calc(77px + env(safe-area-inset-bottom));
+    right: auto;
+    left: calc(var(--dock-left) + var(--dock-bar) + var(--dock-gap));
+    bottom: calc(clamp(38px, 6.5vh, 60px) + env(safe-area-inset-bottom));
     display: grid;
-    width: clamp(36px, 9vw, 64px);
-    height: clamp(36px, 9vw, 64px);
-    transform: translateX(-50%);
+    width: var(--dock-button);
+    height: var(--dock-button);
+    transform: none;
     z-index: 8;
   }
-  .ref-detail .ref-controls > .ref-round:last-child {
+  :is(.ref-detail, .ref-browse) .ref-controls > .ref-round:last-child {
     width: clamp(36px, 9vw, 64px);
     height: clamp(36px, 9vw, 64px);
   }
-  .ref-detail .ref-ticker {
+  :is(.ref-detail, .ref-browse) .ref-ticker {
     display: none;
   }
   .ref-mobile-credit {
     display: none;
   }
-  .ref-detail .ref-mobile-credit {
+  :is(.ref-detail, .ref-browse) .ref-mobile-credit {
     position: fixed;
     inset: auto 0 0;
-    min-height: calc(52px + env(safe-area-inset-bottom));
+    min-height: calc(clamp(32px, 5.5vh, 48px) + env(safe-area-inset-bottom));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1344,31 +1357,31 @@
   }
 }
 @media (min-width: 600px) and (max-width: 760px) {
-  .ref-detail .ref-mobile-players {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players {
     gap: 5px;
     justify-content: space-between;
   }
-  .ref-detail .ref-mobile-players button {
+  :is(.ref-detail, .ref-browse) .ref-mobile-players button {
     min-width: 18px;
     font-size: 12px;
   }
-  .ref-detail .ref-filters button {
+  :is(.ref-detail, .ref-browse) .ref-filters button {
     padding: 17px 16px;
     font-size: 14px;
     letter-spacing: 1.4px;
   }
-  .ref-detail .ref-mobile-credit {
+  :is(.ref-detail, .ref-browse) .ref-mobile-credit {
     font-size: 12px;
   }
 }
 @media (max-width: 380px) {
-  .reference-home.ref-detail .store-header .ref-filters {
+  .reference-home:is(.ref-detail, .ref-browse) .store-header .ref-filters {
     right: 64px;
     left: 8px;
     width: auto;
     transform: none;
   }
-  .reference-home.ref-detail .store-header .ref-controls > .ref-round:first-of-type {
+  .reference-home:is(.ref-detail, .ref-browse) .store-header .ref-controls > .ref-round:first-of-type {
     right: 12px;
     left: auto;
     transform: none;

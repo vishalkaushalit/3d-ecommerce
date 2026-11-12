@@ -47,16 +47,26 @@ export function ReferenceHomePage() {
   const [size, setSize] = useState('M');
   const sheet = useRef<HTMLElement>(null);
   const mobilePlayers = useRef<HTMLDivElement>(null);
+  // Phones browse like Garuda: one focused shirt at a time, shown in the label and number strip.
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 760px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)');
+    const update = () => setIsPhone(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  const browsing = isPhone && !selected && hovered ? hovered : null;
+  const current = selected ?? browsing;
   useEffect(() => {
     if (selected && window.matchMedia('(min-width: 761px)').matches) sheet.current?.focus();
   }, [selected]);
   useEffect(() => {
-    if (selected) {
+    if (current) {
       mobilePlayers.current
         ?.querySelector<HTMLButtonElement>('.active')
         ?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     }
-  }, [selected]);
+  }, [current]);
   const audio = useRef<AudioContext | null>(null);
   const noise = useRef<AudioBufferSourceNode | null>(null);
   const gain = useRef<GainNode | null>(null);
@@ -81,6 +91,10 @@ export function ReferenceHomePage() {
   const reference =
     selected && referencePlayers[selected.number]?.shirt === selected.player
       ? referencePlayers[selected.number]
+      : undefined;
+  const currentReference =
+    current && referencePlayers[current.number]?.shirt === current.player
+      ? referencePlayers[current.number]
       : undefined;
   function nextJersey(direction: number) {
     if (!selected) return;
@@ -149,7 +163,7 @@ export function ReferenceHomePage() {
   }
   return (
     <main
-      className={`reference-home ${entered ? 'ref-entered' : ''} ${selected ? 'ref-detail' : ''}`}
+      className={`reference-home ${entered ? 'ref-entered' : ''} ${selected ? 'ref-detail' : ''} ${browsing ? 'ref-browse' : ''}`}
       style={{ backgroundImage: `url("${assetUrl('plate.jpg')}")` }}
     >
       <h1 className="sr-only">Garuda 2026: The Champions’ Rail</h1>
@@ -171,7 +185,7 @@ export function ReferenceHomePage() {
       </div>
       <StoreHeader
         filter={filter}
-        selectedPosition={selected?.position}
+        selectedPosition={current?.position}
         onFilter={(position) => {
           setFilter(position);
           setSelected(null);
@@ -213,12 +227,12 @@ export function ReferenceHomePage() {
         </Link>
       )}
       <StoreFooter />
-      {selected && (
+      {current && (
         <div className="ref-player-label" role="status" aria-live="polite">
-          <strong>{selected.number}</strong>
-          <span className="ref-selected-name">{reference?.name || selected.player}</span>
+          <strong>{current.number}</strong>
+          <span className="ref-selected-name">{currentReference?.name || current.player}</span>
           <span className="ref-selected-hint">
-            {positionNames[selected.position].toUpperCase()} · TAP THE SHIRT
+            {positionNames[current.position].toUpperCase()} · TAP THE SHIRT
           </span>
         </div>
       )}
@@ -433,15 +447,16 @@ export function ReferenceHomePage() {
           .map((product) => (
             <button
               key={product.id}
-              className={selected?.id === product.id ? 'active' : ''}
+              className={current?.id === product.id ? 'active' : ''}
               aria-label={`Select ${product.player}`}
-              onClick={() => onSelect(product)}
+              // While browsing on a phone, a number brings that shirt to the center; tap the shirt to open it.
+              onClick={() => (browsing ? setHovered(product) : onSelect(product))}
             >
               {product.number}
             </button>
           ))}
       </div>
-      {selected && (
+      {current && (
         <div className="ref-mobile-credit">
           CRAFTED WITH 💛 <img src={assetUrl('screenagers-word.svg')} alt="Screenagers" />
         </div>

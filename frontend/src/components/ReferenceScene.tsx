@@ -1,15 +1,29 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, Html, useGLTF, useProgress } from '@react-three/drei';
-import { DirectionalLight, Group, MathUtils, Mesh, PerspectiveCamera, ShadowMaterial, SpotLight } from 'three';
+import {
+  DirectionalLight,
+  Group,
+  MathUtils,
+  Mesh,
+  PerspectiveCamera,
+  Plane,
+  Raycaster,
+  ShadowMaterial,
+  SpotLight,
+  Vector2,
+  Vector3,
+} from 'three';
 import roomSettings from '../../public/assets/reference/room.json';
 import type { Product } from '../../../shared/types';
 import { referencePlayers } from '../../../shared/referencePlayers';
 import { JerseyModel, assetUrl } from './JerseyModel';
 import { SceneBoundary } from './SceneBoundary';
 import { JerseyArtwork } from './ProductCard';
-import { openJerseyGap, pushJerseys, type RailBounds } from './railPhysics';
+import { RailSim, type Hanger } from './railSim';
 import { createClothMotion, createClothUniforms, updateClothMotion } from './clothMotion';
+import { clampDelta } from './spring';
+import { AdaptiveQuality } from './AdaptiveQuality';
 
 export const positions = ['GK', 'DEF', 'MID', 'FWD'] as const;
 export const positionNames = {
@@ -61,13 +75,21 @@ function LoadingProgress({ onProgress }: { onProgress: (progress: number) => voi
   return null;
 }
 
-function RoomLighting({ selected, shadowsEnabled }: { selected: boolean; shadowsEnabled: boolean }) {
+function RoomLighting({
+  selected,
+  shadowsEnabled,
+  stage,
+}: {
+  selected: boolean;
+  shadowsEnabled: boolean;
+  stage: Vector3;
+}) {
   const key = useRef<SpotLight>(null);
   const fillLight = useRef<SpotLight>(null);
-  const { size } = useThree();
   const detailTarget = useMemo(() => new Group(), []);
   useFrame((_state, delta) => {
-    detailTarget.position.set(size.width > 900 ? -0.53 : 0, 1.25, 2.55);
+    // Aim the detail lights just below the stage hook, as on Garuda (stage - 0.42).
+    detailTarget.position.set(stage.x, stage.y - 0.42, stage.z);
     if (key.current) key.current.intensity = MathUtils.damp(key.current.intensity, selected ? 18 : 0, 8, delta);
     if (fillLight.current) fillLight.current.intensity = MathUtils.damp(fillLight.current.intensity, selected ? 5 : 0, 8, delta);
   });
@@ -100,7 +122,7 @@ function RoomLighting({ selected, shadowsEnabled }: { selected: boolean; shadows
     model.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       if (/^Part/.test(object.name)) { object.visible = false; return; }
-      object.material = /^(Back|Shelf|Upper)/.test(object.name) ? soft : dark;
+      object.material = /^(Back|Shelf|Upper|SeatBase)/.test(object.name) ? soft : dark;
       object.receiveShadow = true;
     });
     return { model, dark, soft };
@@ -114,9 +136,19 @@ function RoomLighting({ selected, shadowsEnabled }: { selected: boolean; shadows
   }, [room, lighting]);
   return <>
     <primitive object={detailTarget} />
+    {/* The key light always casts shadows, even while dark: the ShadowMaterial
+        catchers only read the shadow map, so this is what throws the moving shirt
+        shadows across the lockers and bench seats, as on the Garuda rail. */}
     <spotLight ref={key} position={[2.5, 2.9, 4.1]} target={detailTarget}
-      intensity={0} distance={12} angle={MathUtils.degToRad(35)} penumbra={0.65} decay={2}
-      color="#fff4e7" />
+      intensity={0} distance={12} angle={MathUtils.degToRad(22)} penumbra={0.65} decay={2}
+      color="#fff4e7"
+      castShadow={shadowsEnabled}
+      shadow-mapSize={[2048, 2048]}
+      shadow-bias={-0.0003}
+      shadow-normalBias={0.012}
+      shadow-radius={4}
+      shadow-camera-near={1}
+      shadow-camera-far={6} />
     <spotLight ref={fillLight} position={[-1.9, 2.5, 4]} target={detailTarget}
       intensity={0} distance={10} angle={MathUtils.degToRad(40)} penumbra={0.7} decay={2}
       color="#cfe3ff" />
@@ -126,47 +158,41 @@ function RoomLighting({ selected, shadowsEnabled }: { selected: boolean; shadows
   </>;
 }
 
+const RAIL_Y = roomSettings.rail.z;
+const RAIL_HALF = roomSettings.rail.half - 0.09;
+const PLATE_ASPECT = roomSettings.plate[0] / roomSettings.plate[1];
+const DESKTOP_STAGE = { y: 1.86, z: 2.55 };
+const smoothstep = (value: number) => value * value * (3 - 2 * value);
+const soften = (value: number, limit: number) => limit * Math.tanh(value / limit);
+
 type HangingJerseyProps = {
   product: Product;
-  x: number;
+  index: number;
+  sim: RailSim;
+  stage: Vector3;
   selected: boolean;
   hovered: boolean;
-  dragging: boolean;
-  railVelocity: { current: number };
-  waveIndex: number;
-  clearance: number;
-  rotation: number;
-  onSelect: (product: Product) => void;
-  onHover: (product: Product | null) => void;
-  onDragStart: (id: string) => void;
-  onDrag: (id: string, delta: number) => void;
-  onDragEnd: () => boolean;
+  showHoverCard: boolean;
+  registerGroup: (index: number, group: Group | null) => void;
 };
 
+/** Draws one hanger from the rail simulation. It never re-renders during a drag. */
 function HangingJersey({
   product,
-  x,
+  index,
+  sim,
+  stage,
   selected,
   hovered,
-  dragging,
-  railVelocity,
-  waveIndex,
-  clearance,
-  rotation,
-  onSelect,
-  onHover,
-  onDragStart,
-  onDrag,
-  onDragEnd,
+  showHoverCard,
+  registerGroup,
 }: HangingJerseyProps) {
   const group = useRef<Group>(null);
-  const initialPosition = useRef<[number, number, number]>([x, 1.95, 0]);
   const cloth = useRef<Group>(null);
-  const { gl, size } = useThree();
-  const angle = useRef(0);
   const motion = useRef(createClothMotion());
   const clothUniforms = useMemo(createClothUniforms, []);
   const reducedMotion = useRef(false);
+  const fly = useRef(0); // 0 on the rail, 1 on the stage
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => {
@@ -176,128 +202,60 @@ function HangingJersey({
     preference.addEventListener('change', update);
     return () => preference.removeEventListener('change', update);
   }, []);
-  const press = useRef<{ x: number; angle: number; moved: boolean } | null>(null);
   useEffect(() => {
-    angle.current = 0;
-  }, [selected]);
-  useFrame((_state, delta) => {
-    if (!group.current || !cloth.current) return;
+    registerGroup(index, group.current);
+    return () => registerGroup(index, null);
+  }, [index, registerGroup]);
+  useFrame((_state, rawDelta) => {
     const model = group.current;
+    const hanger = sim.hangers[index];
+    if (!model || !cloth.current || !hanger) return;
+    const delta = clampDelta(rawDelta);
+    const onStage = sim.selected === hanger;
+    const still = reducedMotion.current;
+    // Fly between the rail and the stage with an eased blend, as on Garuda.
+    fly.current += ((onStage ? 1 : 0) - fly.current) * Math.min(1, delta * 3.2);
+    if (fly.current < 0.001) fly.current = 0;
+    const blend = smoothstep(fly.current);
+    const bob = still ? 0 : Math.sin(sim.t * 1.3) * 0.006 * blend;
     const previousX = model.position.x;
-    model.position.x = MathUtils.damp(
-      model.position.x,
-      selected ? (size.width > 900 ? -0.53 : 0) : x,
-      14,
-      delta,
+    model.position.set(
+      MathUtils.lerp(hanger.x, stage.x, blend),
+      MathUtils.lerp(RAIL_Y + hanger.lift, stage.y, blend) + bob,
+      MathUtils.lerp(0, stage.z, blend),
     );
-    // Move the hanger and fabric together with a subtle, slow idle bob.
-    const idleBob = reducedMotion.current || dragging || press.current
-      ? 0
-      : Math.sin(_state.clock.elapsedTime * (Math.PI * 2 / 4.8) + waveIndex * 0.65)
-        * (selected ? 0.009 : 0.003);
-    model.position.y = MathUtils.damp(model.position.y, (selected ? 1.86 : 1.95) + idleBob, 8, delta);
-    model.position.z = MathUtils.damp(model.position.z, selected ? 2.55 : 0, 8, delta);
-    // The hanger never receives this rotation. Only the cloth turns around its neck.
-    cloth.current.rotation.y = MathUtils.damp(
-      cloth.current.rotation.y,
-      selected
-        ? Math.PI + rotation + angle.current
-        : dragging
-          ? Math.PI * 0.66
-          : hovered
-            ? Math.PI
-            : Math.PI / 2,
-      7,
-      delta,
+    // The whole hanger swings from its hook; only the cloth turns.
+    model.rotation.set(
+      still ? 0 : soften(hanger.sway, 0.3) * (1 - blend),
+      0,
+      still ? 0 : soften(hanger.tilt, 0.42) * (1 - blend),
     );
-    // Drive the fabric from actual movement, including neighbors being pushed along the rail.
-    const velocity = (model.position.x - previousX) / Math.max(delta, 0.001) + railVelocity.current;
-    updateClothMotion(motion.current, selected || reducedMotion.current ? 0 : velocity, delta);
+    cloth.current.rotation.y = hanger.yaw;
+
+    // Fabric reacts to the real movement, including being knocked by neighbors.
+    const velocity = (model.position.x - previousX) / Math.max(delta, 0.001);
+    updateClothMotion(motion.current, onStage || still ? 0 : velocity, delta);
     const width =
-      Math.abs(Math.cos(cloth.current.rotation.y)) * 0.296 +
-      Math.abs(Math.sin(cloth.current.rotation.y)) * 0.059;
-    clothUniforms.uClothBend.value = reducedMotion.current ? 0 : motion.current.bend;
-    clothUniforms.uClothRipple.value = reducedMotion.current ? 0 : motion.current.ripple;
-    clothUniforms.uClothEnergy.value = reducedMotion.current ? 0 : motion.current.energy;
-    clothUniforms.uClothTime.value = motion.current.phase + waveIndex * 0.24;
-    clothUniforms.uClothYaw.value = cloth.current.rotation.y;
+      Math.abs(Math.cos(hanger.yaw)) * 0.296 + Math.abs(Math.sin(hanger.yaw)) * 0.059;
+    const previous = sim.hangers[index - 1];
+    const next = sim.hangers[index + 1];
+    const clearance = onStage
+      ? 1
+      : Math.min(
+          previous ? hanger.x - previous.x - 0.075 : hanger.x - sim.walls.min + 0.06,
+          next ? next.x - hanger.x - 0.075 : sim.walls.max - hanger.x + 0.06,
+        );
+    clothUniforms.uClothBend.value = still ? 0 : motion.current.bend;
+    clothUniforms.uClothRipple.value = still ? 0 : motion.current.ripple;
+    clothUniforms.uClothEnergy.value = still ? 0 : motion.current.energy;
+    clothUniforms.uClothTime.value = motion.current.phase + index * 0.24;
+    clothUniforms.uClothYaw.value = hanger.yaw;
     clothUniforms.uClothClearance.value = Math.max(0, clearance - width - 0.02);
-    const scale = selected ? (size.width < 760 ? 0.68 : 1) : 1;
-    model.scale.setScalar(MathUtils.damp(model.scale.x, scale, 8, delta));
   });
-  function pointerDown(event: ThreeEvent<PointerEvent>) {
-    event.stopPropagation();
-    press.current = { x: event.clientX, angle: angle.current, moved: false };
-    if (!selected) onDragStart(product.id);
-    (event.target as Element).setPointerCapture(event.pointerId);
-    gl.domElement.style.cursor = 'grabbing';
-  }
-  function pointerMove(event: ThreeEvent<PointerEvent>) {
-    if (!press.current) return;
-    event.stopPropagation();
-    const delta = event.clientX - press.current.x;
-    if (Math.abs(delta) > 4) press.current.moved = true;
-    if (!press.current.moved) return;
-    if (selected) angle.current = press.current.angle + delta * 0.012;
-    else {
-      const visibleWorldWidth =
-        (2 * Math.tan(((19.5 / 2) * Math.PI) / 180) * 5.6 * size.width) / size.height;
-      onDrag(product.id, (delta / size.width) * visibleWorldWidth);
-    }
-  }
-  function finishDrag() {
-    press.current = null;
-    const mobileDrag = onDragEnd();
-    gl.domElement.style.cursor = 'grab';
-    return mobileDrag;
-  }
-  function pointerUp(event: ThreeEvent<PointerEvent>) {
-    if (!press.current) return;
-    event.stopPropagation();
-    const moved = press.current.moved;
-    (event.target as Element).releasePointerCapture(event.pointerId);
-    const mobileDrag = finishDrag();
-    if (!moved) {
-      if (selected) angle.current += Math.PI;
-      else onSelect(product);
-    } else if (
-      !selected &&
-      !mobileDrag &&
-      event.clientX >= 0 &&
-      event.clientX <= size.width &&
-      event.clientY >= 0 &&
-      event.clientY <= size.height
-    ) {
-      onSelect(product);
-    }
-    console.log(
-      selected ? '[rotateJersey]' : moved ? '[slideJerseys]' : '[selectJersey]',
-      product.id,
-    );
-  }
   return (
-    <group
-      name={`rail-${product.id}`}
-      ref={group}
-      position={initialPosition.current}
-      onPointerDown={pointerDown}
-      onPointerMove={pointerMove}
-      onPointerUp={pointerUp}
-      onPointerCancel={finishDrag}
-      onPointerOver={(event) => {
-        event.stopPropagation();
-        onHover(product);
-        if (!press.current) gl.domElement.style.cursor = 'grab';
-      }}
-      onPointerOut={() => {
-        if (!press.current) {
-          onHover(null);
-          gl.domElement.style.cursor = 'auto';
-        }
-      }}
-    >
+    <group name={`rail-${product.id}`} ref={group}>
       <JerseyModel product={product} clothRef={cloth} clothUniforms={clothUniforms} />
-      {hovered && !selected && (
+      {showHoverCard && hovered && !selected && (
         <Html
           position={[0, -1.12, 0]}
           center
@@ -318,14 +276,41 @@ function HangingJersey({
   );
 }
 
-function getInterGroupGap(posA: string, posB: string, isMobile: boolean): number {
+function getInterGroupGap(posA: string, posB: string): number {
   if (posA === posB) return 0;
   // Center gap between DEF and MID is the widest, leaving space around the center pillar
-  if ((posA === 'DEF' && posB === 'MID') || (posA === 'MID' && posB === 'DEF')) {
-    return isMobile ? 0.36 : 0.28;
-  }
-  return isMobile ? 0.24 : 0.16;
+  if ((posA === 'DEF' && posB === 'MID') || (posA === 'MID' && posB === 'DEF')) return 0.28;
+  return 0.16;
 }
+
+/**
+ * Garuda's mobile layout: every shirt stays on the real rail, spread evenly,
+ * with a wider gap between position groups. The camera zooms in and pans instead.
+ */
+function spreadOnRail(groupsInOrder: string[]) {
+  const count = groupsInOrder.length;
+  const breaks = groupsInOrder.filter((group, index) => index && group !== groupsInOrder[index - 1]).length;
+  const min = -RAIL_HALF + 0.14;
+  const max = RAIL_HALF - 0.14;
+  const groupGap = 0.24;
+  const step = Math.min(0.22, Math.max(0.1, (max - min - breaks * groupGap) / Math.max(1, count - 1 - breaks)));
+  const span = (count - 1 - breaks) * step + breaks * groupGap;
+  let x = (min + max) / 2 - span / 2;
+  return groupsInOrder.map((group, index) => {
+    if (index) x += group !== groupsInOrder[index - 1] ? groupGap : step;
+    return x;
+  });
+}
+
+type Press = {
+  x: number;
+  y: number;
+  time: number;
+  moved: boolean;
+  mode: 'grab' | 'sweep' | 'spin' | 'swipe' | 'none';
+  onShirt: boolean;
+  lastTime: number;
+};
 
 function Scene({
   products,
@@ -338,7 +323,7 @@ function Scene({
   onReady,
   hovered,
 }: SceneProps) {
-  const { size } = useThree();
+  const { size, gl, camera } = useThree();
   const sorted = useMemo(
     () =>
       [...products]
@@ -352,250 +337,367 @@ function Scene({
   );
   const visibleIds = sorted.map((product) => product.id).join(',');
   const worldWidth = (2 * Math.tan(((19.5 / 2) * Math.PI) / 180) * 5.6 * size.width) / size.height;
-  const isMobile = size.width < 760;
-  const mobileSpacing = (worldWidth + 0.6) / 3 + 0.02;
+  const isMobile = size.width <= 760; // same breakpoint as the page CSS (max-width: 760px)
   const groupCount = new Set(sorted.map((product) => product.position)).size;
-  const halfWidth = isMobile
-    ? Math.max(
-        1.75,
-        ((sorted.length - 1) * mobileSpacing + Math.max(0, groupCount - 1) * 0.28) / 2 + 0.2,
-      )
-    : worldWidth / 2 - 0.14;
-  const bounds: RailBounds = {
-    min: -halfWidth,
-    max: halfWidth,
-    gap: Math.min(0.065, (halfWidth * 2 - 0.78) / Math.max(1, sorted.length - 3)),
-  };
+  const halfWidth = isMobile ? RAIL_HALF : worldWidth / 2 - 0.14;
   const initialPositions = useMemo(() => {
     if (!sorted.length) return [];
+    if (isMobile) return spreadOnRail(sorted.map((product) => product.position));
     if (groupCount <= 1) {
-      const spacing = isMobile
-        ? mobileSpacing
-        : Math.min(0.14, 2.2 / Math.max(1, sorted.length - 1));
+      const spacing = Math.min(0.14, 2.2 / Math.max(1, sorted.length - 1));
       const totalWidth = (sorted.length - 1) * spacing;
       return sorted.map((_, i) => i * spacing - totalWidth / 2);
     }
-
-    const spacing = isMobile ? 0.15 : 0.088;
     const result: number[] = [];
     let cursor = 0;
     sorted.forEach((product, index) => {
       if (index > 0) {
         const prev = sorted[index - 1];
-        if (prev.position !== product.position) {
-          cursor += getInterGroupGap(prev.position, product.position, isMobile);
-        } else {
-          cursor += spacing;
-        }
+        cursor +=
+          prev.position !== product.position ? getInterGroupGap(prev.position, product.position) : 0.088;
       }
       result.push(cursor);
     });
+    // Fill the desktop rail while reserving room for the end jerseys' sleeves.
+    const span = result[result.length - 1] - result[0];
+    const midpoint = (result[0] + result[result.length - 1]) / 2;
+    const availableSpan = Math.max(0.5, worldWidth * 0.88 - 0.18);
+    return result.map((x) => ((x - midpoint) / span) * availableSpan);
+  }, [visibleIds, isMobile, groupCount, worldWidth]);
 
-    let defLastIndex = -1;
-    let midFirstIndex = -1;
-    for (let i = 0; i < sorted.length; i++) {
-      if (sorted[i].position === 'DEF') defLastIndex = i;
-      if (sorted[i].position === 'MID' && midFirstIndex === -1) midFirstIndex = i;
-    }
+  // One simulation per visible set of shirts. It lives outside React state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sim = useMemo(() => new RailSim(initialPositions), [visibleIds]);
+  sim.walls = { min: Math.max(-RAIL_HALF, -halfWidth), max: Math.min(RAIL_HALF, halfWidth) };
+  sim.rotationOffset = rotation;
 
-    const center =
-      defLastIndex !== -1 && midFirstIndex !== -1
-        ? (result[defLastIndex] + result[midFirstIndex]) / 2
-        : (result[0] + result[result.length - 1]) / 2;
-
-    if (!isMobile) {
-      // Fill the desktop rail while reserving room for the end jerseys' sleeves.
-      const span = result[result.length - 1] - result[0];
-      const midpoint = (result[0] + result[result.length - 1]) / 2;
-      const availableSpan = Math.max(0.5, worldWidth * 0.88 - 0.18);
-      return result.map((x) => ((x - midpoint) / span) * availableSpan);
-    }
-    return result.map((x) => x - center);
-  }, [visibleIds, isMobile, mobileSpacing, groupCount, worldWidth]);
-  const [railPositions, setRailPositions] = useState(initialPositions);
-  const [dragging, setDragging] = useState(false);
-  const railGroup = useRef<Group>(null);
-  const railTargetOffset = useRef(0);
-  const railMomentum = useRef(0);
-  const railVelocity = useRef(0);
-  const drag = useRef<{
-    id: string;
-    origin: number;
-    positions: number[];
-    mobile: boolean;
-    startOffset: number;
-    lastOffset: number;
-    lastTime: number;
-  } | null>(null);
-  const dragFrame = useRef<number | null>(null);
-  const contentHalfWidth = Math.max(0, ...initialPositions.map(Math.abs)) + 0.15;
-  const maxRailOffset = isMobile
-    ? Math.max(Math.abs(initialPositions[0] ?? 0), Math.abs(initialPositions.at(-1) ?? 0))
-    : Math.max(0, contentHalfWidth - Math.min(halfWidth, worldWidth / 2));
-  useFrame((_state, delta) => {
-    if (!railGroup.current) return;
-    const boundedOffset = Math.max(
-      -maxRailOffset,
-      Math.min(maxRailOffset, railTargetOffset.current),
-    );
-    if (drag.current?.mobile) railMomentum.current = 0;
-    else if (Math.abs(railMomentum.current) > 0.015) {
-      railTargetOffset.current = Math.max(
-        -maxRailOffset,
-        Math.min(maxRailOffset, boundedOffset + railMomentum.current * delta),
-      );
-      railMomentum.current *= Math.exp(-4.5 * delta);
-    } else {
-      railMomentum.current = 0;
-      railTargetOffset.current = boundedOffset;
-    }
-    const previousOffset = railGroup.current.position.x;
-    railGroup.current.position.x = MathUtils.damp(
-      previousOffset,
-      railTargetOffset.current,
-      18,
-      delta,
-    );
-    railVelocity.current = (railGroup.current.position.x - previousOffset) / Math.max(delta, 0.001);
-  });
-  useEffect(
-    () => () => {
-      if (dragFrame.current !== null) cancelAnimationFrame(dragFrame.current);
-    },
+  /**
+   * Camera framing, as on Garuda: the room plate is "cover"-fitted to the
+   * screen. On a phone it is zoomed in (up to 1.22x) and panned sideways in
+   * pixels, so the rail stays real and the camera travels along it.
+   */
+  const view = useRef({ pan: 0, maxPan: 0, focus: -1, detail: 0, swipeVelocity: 0, pressing: false });
+  const stage = useMemo(() => new Vector3(0, DESKTOP_STAGE.y, DESKTOP_STAGE.z), []);
+  const groups = useRef<(Group | null)[]>([]);
+  const registerGroup = useCallback((index: number, group: Group | null) => {
+    groups.current[index] = group;
+  }, []);
+  const tools = useMemo(
+    () => ({ raycaster: new Raycaster(), ndc: new Vector2(), point: new Vector3(), plane: new Plane(new Vector3(0, 0, 1), 0) }),
     [],
   );
-  const validPositions = railPositions.length === sorted.length ? railPositions : initialPositions;
-  const hoveredIndex =
-    !selected && !dragging ? sorted.findIndex((product) => product.id === hovered?.id) : -1;
-  const displayPositions = openJerseyGap(validPositions, hoveredIndex, bounds);
-  useEffect(() => {
-    if (drag.current) return;
-    setRailPositions(initialPositions);
-    railTargetOffset.current = 0;
-    railMomentum.current = 0;
-    if (dragFrame.current !== null) cancelAnimationFrame(dragFrame.current);
-    dragFrame.current = null;
-    drag.current = null;
-    setDragging(false);
-  }, [initialPositions, reset]);
-  useEffect(() => {
-    if (selected) {
-      railTargetOffset.current = 0;
-      railMomentum.current = 0;
+
+  const live = useRef({ sorted, isMobile, onSelect, onHover });
+  live.current = { sorted, isMobile, onSelect, onHover };
+
+  const applyView = (zoom: number) => {
+    const perspective = camera as PerspectiveCamera;
+    const { width, height } = size;
+    let fullWidth = Math.max(width, height * PLATE_ASPECT) * zoom;
+    const fullHeight = (fullWidth / PLATE_ASPECT);
+    view.current.maxPan = isMobile ? Math.max(0, (fullWidth - width) / 2 - fullWidth * 0.12) : 0;
+    view.current.pan = Math.max(-view.current.maxPan, Math.min(view.current.maxPan, view.current.pan));
+    fullWidth = Math.max(fullWidth, width);
+    perspective.aspect = PLATE_ASPECT;
+    perspective.setViewOffset(
+      fullWidth,
+      fullHeight,
+      (fullWidth - width) / 2 + view.current.pan,
+      (fullHeight - height) / 2,
+      width,
+      height,
+    );
+    perspective.updateProjectionMatrix();
+  };
+  /** Screen x (in canvas pixels) of a point on the rail. */
+  const railToScreen = (x: number) => {
+    tools.point.set(x, RAIL_Y, 0).project(camera);
+    return (tools.point.x * 0.5 + 0.5) * size.width;
+  };
+  /** The shirt whose slot is closest to the screen center, shifted by `offset` pixels. */
+  const nearestToCenter = (offset = 0) => {
+    let best = 0;
+    let bestDistance = Infinity;
+    sim.hangers.forEach((hanger, index) => {
+      const distance = Math.abs(railToScreen(hanger.home) - size.width / 2 - offset);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+    return best;
+  };
+  const focus = (index: number) => {
+    if (!sim.hangers.length) return;
+    const next = Math.max(0, Math.min(sim.hangers.length - 1, index));
+    if (next === view.current.focus) return;
+    view.current.focus = next;
+    live.current.onHover(live.current.sorted[next] ?? null);
+  };
+  const tick = useRef({ applyView, railToScreen, nearestToCenter, focus });
+  tick.current = { applyView, railToScreen, nearestToCenter, focus };
+
+  // Step the physics and the camera before the jerseys read them (negative priority runs first).
+  useFrame((_state, rawDelta) => {
+    const delta = clampDelta(rawDelta);
+    const v = view.current;
+    sim.step(delta);
+    v.detail += ((sim.selected ? 1 : 0) - v.detail) * Math.min(1, delta * 3.2);
+    const aspect = size.width / size.height;
+    const browseZoom = isMobile && aspect < 1 ? Math.min(1.22, (1 / aspect) * 0.95) : 1;
+    tick.current.applyView(MathUtils.lerp(browseZoom, 1, smoothstep(v.detail)));
+
+    if (isMobile) {
+      // The focused shirt faces you, and the camera eases until it is centered.
+      if (!sim.selected && !v.pressing && sim.hangers[v.focus]) {
+        sim.hover(sim.hangers[v.focus]);
+        const target = v.pan + tick.current.railToScreen(sim.hangers[v.focus].x) - size.width / 2;
+        v.pan += (Math.max(-v.maxPan, Math.min(v.maxPan, target)) - v.pan) * Math.min(1, delta * 5);
+        tick.current.applyView(MathUtils.lerp(browseZoom, 1, smoothstep(v.detail)));
+      }
+      // Phone stage: the hook sits 11.5% from the top of the screen, 0.6 in front of the rail.
+      tools.ndc.set(0, 1 - 2 * 0.115);
+      tools.raycaster.setFromCamera(tools.ndc, camera);
+      tools.plane.constant = -0.6;
+      if (tools.raycaster.ray.intersectPlane(tools.plane, tools.point)) stage.copy(tools.point);
+      tools.plane.constant = 0;
+    } else {
+      stage.set(size.width > 900 ? -0.53 : 0, DESKTOP_STAGE.y, DESKTOP_STAGE.z);
     }
-  }, [selected]);
+  }, -1);
+
+  // New slots after a resize or reset: glide there instead of jumping.
+  useEffect(() => {
+    sim.setHomes(initialPositions, true);
+  }, [sim, initialPositions, reset]);
+
+  // On a phone, start browsing from the shirt in the middle of the rail.
+  useEffect(() => {
+    if (!isMobile) {
+      view.current.focus = -1;
+      return;
+    }
+    view.current.pan = 0;
+    view.current.focus = -1;
+    let middle = 0;
+    initialPositions.forEach((x, index) => {
+      if (Math.abs(x) < Math.abs(initialPositions[middle])) middle = index;
+    });
+    tick.current.focus(middle);
+    // Only when the shirt set or the layout mode changes, not on every resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim, isMobile, reset]);
+
+  // The page owns the selection; the simulation follows it.
+  const selectedIndex = selected ? sorted.findIndex((product) => product.id === selected.id) : -1;
+  useEffect(() => {
+    const hanger = selectedIndex >= 0 ? sim.hangers[selectedIndex] : null;
+    if (hanger && sim.selected !== hanger) {
+      sim.open(hanger);
+      if (isMobile) view.current.focus = selectedIndex;
+    } else if (!hanger && sim.selected) sim.close();
+  }, [sim, selectedIndex, isMobile]);
+
+  // Hover can also come from the page (the number strip). On a phone that moves the focus.
+  const hoveredIndex = hovered ? sorted.findIndex((product) => product.id === hovered.id) : -1;
+  useEffect(() => {
+    if (isMobile) {
+      if (hoveredIndex >= 0) view.current.focus = hoveredIndex;
+    } else sim.hover(hoveredIndex >= 0 ? sim.hangers[hoveredIndex] : null);
+  }, [sim, hoveredIndex, isMobile]);
+
   useEffect(() => {
     if (sorted.length) onReady();
   }, [onReady, sorted.length]);
-  function startDrag(id: string) {
-    const index = sorted.findIndex((product) => product.id === id);
-    const mobile = size.width <= 760;
-    drag.current = {
-      id,
-      origin: displayPositions[index],
-      positions: [...displayPositions],
-      mobile,
-      startOffset: railTargetOffset.current,
-      lastOffset: railTargetOffset.current,
-      lastTime: 0,
+
+  // All input goes through the canvas, as on Garuda: grab, sweep, spin, swipe.
+  // A shirt opens only on a real tap: under 5px of movement and under 450ms.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    canvas.style.touchAction = 'none';
+    const raycaster = new Raycaster();
+    const plane = new Plane(new Vector3(0, 0, 1), 0);
+    const pointer = new Vector2();
+    const hit = new Vector3();
+    const screen = new Vector3();
+    let press: Press | null = null;
+    let lastX = 0;
+    let hoverId: string | null = null;
+
+    const aim = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
     };
-  }
-  function moveDrag(id: string, delta: number) {
-    if (!drag.current || drag.current.id !== id) return;
-    if (drag.current.mobile) {
-      setDragging(true);
-      const offset = Math.max(
-        -maxRailOffset,
-        Math.min(maxRailOffset, drag.current.startOffset + delta),
-      );
-      const time = performance.now();
-      if (drag.current.lastTime) {
-        const elapsed = Math.max(0.001, (time - drag.current.lastTime) / 1000);
-        railMomentum.current = Math.max(
-          -2.5,
-          Math.min(2.5, (offset - drag.current.lastOffset) / elapsed),
-        );
+    const toRail = (clientX: number, clientY: number) => {
+      aim(clientX, clientY);
+      if (!raycaster.ray.intersectPlane(plane, hit)) return null;
+      return { x: hit.x, y: hit.y };
+    };
+    const selectedGroup = () => (sim.selected ? groups.current[sim.hangers.indexOf(sim.selected)] : null);
+    const overSelected = (clientX: number, clientY: number) => {
+      const group = selectedGroup();
+      if (!group) return false;
+      aim(clientX, clientY);
+      return raycaster.intersectObject(group, true).length > 0;
+    };
+    const productOf = (hanger: Hanger | null) =>
+      hanger ? live.current.sorted[sim.hangers.indexOf(hanger)] ?? null : null;
+    const setHover = (hanger: Hanger | null) => {
+      sim.hover(hanger);
+      const product = productOf(sim.hovered);
+      const id = product?.id ?? null;
+      if (id !== hoverId) {
+        hoverId = id;
+        live.current.onHover(product);
       }
-      drag.current.lastOffset = offset;
-      drag.current.lastTime = time;
-      railTargetOffset.current = offset;
-      return;
-    }
-    const index = sorted.findIndex((product) => product.id === id);
-    setDragging(true);
-    // Use the last positions, so reversing direction does not pull pushed neighbors back.
-    const next = pushJerseys(
-      drag.current.positions,
-      index,
-      drag.current.origin + delta,
-      bounds,
-      0.45,
-      0.32,
-    );
-    drag.current.positions = next;
-    // Pointer events can arrive faster than display frames. Commit only the latest positions.
-    if (dragFrame.current === null) {
-      dragFrame.current = requestAnimationFrame(() => {
-        dragFrame.current = null;
-        if (drag.current) setRailPositions(drag.current.positions);
-      });
-    }
-  }
-  function endDrag(): boolean {
-    if (dragFrame.current !== null) {
-      cancelAnimationFrame(dragFrame.current);
-      dragFrame.current = null;
-      if (drag.current) setRailPositions(drag.current.positions);
-    }
-    const activeDrag = drag.current;
-    drag.current = null;
-    if (activeDrag?.mobile && activeDrag.lastTime) {
-      const projectedOffset = activeDrag.lastOffset + railMomentum.current / 4.5;
-      const nearestPosition = initialPositions.reduce(
-        (nearest, position) =>
-          Math.abs(position + projectedOffset) < Math.abs(nearest + projectedOffset)
-            ? position
-            : nearest,
-        initialPositions[0] ?? 0,
-      );
-      railTargetOffset.current = -nearestPosition;
-    }
-    railMomentum.current = 0;
-    setDragging(false);
-    return Boolean(activeDrag?.mobile);
-  }
-  function hoverJersey(product: Product | null) {
-    if (!drag.current) onHover(product);
-  }
+    };
+    const updateCursor = (clientX: number, clientY: number) => {
+      if (press?.mode === 'grab') canvas.style.cursor = 'grabbing';
+      else if (sim.selected) canvas.style.cursor = overSelected(clientX, clientY) ? 'grab' : 'zoom-out';
+      else canvas.style.cursor = sim.hovered ? 'grab' : 'default';
+    };
+
+    const down = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        /* capture is optional */
+      }
+      lastX = event.clientX;
+      const now = performance.now();
+      const base: Press = { x: event.clientX, y: event.clientY, time: now, moved: false, mode: 'none', onShirt: false, lastTime: now };
+      if (sim.selected) {
+        sim.spinning = true;
+        press = { ...base, mode: 'spin', onShirt: overSelected(event.clientX, event.clientY) };
+        return;
+      }
+      if (live.current.isMobile) {
+        // Phone: a finger on the rail pans the camera (the focused shirt keeps facing you).
+        view.current.pressing = true;
+        view.current.swipeVelocity = 0;
+        press = { ...base, mode: 'swipe' };
+        return;
+      }
+      const point = toRail(event.clientX, event.clientY);
+      const hanger = point && sim.pick(point.x, point.y, RAIL_Y);
+      if (point && hanger) {
+        sim.grab(hanger, point.x);
+        setHover(null);
+        press = { ...base, mode: 'grab' };
+      } else if (point && point.y < RAIL_Y + 0.15 && point.y > RAIL_Y - 0.9) {
+        sim.sweep(point.x);
+        press = { ...base, mode: 'sweep' };
+      } else press = base;
+      updateCursor(event.clientX, event.clientY);
+    };
+
+    const move = (event: PointerEvent) => {
+      const point = toRail(event.clientX, event.clientY);
+      if (!press) {
+        if (!sim.selected && !live.current.isMobile) {
+          setHover(point && sim.pick(point.x, point.y, RAIL_Y));
+          updateCursor(event.clientX, event.clientY);
+        }
+        if (sim.selected) updateCursor(event.clientX, event.clientY);
+        return;
+      }
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 5) press.moved = true;
+      const dx = event.clientX - lastX;
+      lastX = event.clientX;
+      if (press.mode === 'spin') sim.spin(dx * 0.012);
+      else if (press.mode === 'swipe') {
+        const v = view.current;
+        v.pan = Math.max(-v.maxPan, Math.min(v.maxPan, v.pan - dx));
+        // Swipe speed in px/ms, smoothed 60/40 so one noisy event can't fling it.
+        const now = performance.now();
+        v.swipeVelocity = v.swipeVelocity * 0.6 + (-dx / Math.max(1, now - press.lastTime)) * 0.4;
+        press.lastTime = now;
+      } else if (point && (press.mode === 'grab' || press.mode === 'sweep')) sim.dragTo(point.x);
+    };
+
+    const finish = (event: PointerEvent, cancelled: boolean) => {
+      if (!press) return;
+      const current = press;
+      press = null;
+      view.current.pressing = false;
+      const tap = !cancelled && !current.moved && performance.now() - current.time < 450;
+      const grabbed = sim.grabbed;
+      sim.spinning = false;
+      sim.release();
+      const { sorted: list, onSelect: select } = live.current;
+
+      if (current.mode === 'grab') {
+        // Only a tap opens the detail card. A drag just moves the shirt.
+        if (tap && grabbed) select(list[sim.hangers.indexOf(grabbed)] ?? null);
+      } else if (current.mode === 'swipe') {
+        if (tap) {
+          // Tap the focused shirt to open it; tap a neighbor to bring it to the center.
+          const point = toRail(event.clientX, event.clientY);
+          const hanger = point && sim.pick(point.x, point.y, RAIL_Y);
+          const index = hanger ? sim.hangers.indexOf(hanger) : -1;
+          if (index >= 0 && index === view.current.focus) select(list[index] ?? null);
+          else if (index >= 0) tick.current.focus(index);
+        } else {
+          // Land on the shirt nearest the center, thrown further by a fast flick.
+          tick.current.focus(tick.current.nearestToCenter(view.current.swipeVelocity * 160));
+        }
+      } else if (current.mode === 'spin' && tap) {
+        const group = selectedGroup();
+        if (current.onShirt && group) {
+          // Tap the shirt: turn it toward the tapped side.
+          group.getWorldPosition(screen).project(camera);
+          const rect = canvas.getBoundingClientRect();
+          const shirtX = rect.left + (screen.x * 0.5 + 0.5) * rect.width;
+          sim.flip(event.clientX < shirtX ? -1 : 1);
+        } else select(null); // Tap outside the shirt closes it.
+      }
+      if (!cancelled && !sim.selected && !live.current.isMobile) {
+        const point = toRail(event.clientX, event.clientY);
+        setHover(point && sim.pick(point.x, point.y, RAIL_Y));
+      }
+      updateCursor(event.clientX, event.clientY);
+    };
+    const up = (event: PointerEvent) => finish(event, false);
+    const cancel = (event: PointerEvent) => finish(event, true);
+    const leave = () => {
+      if (!press && !live.current.isMobile) setHover(null);
+    };
+
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', cancel);
+    canvas.addEventListener('pointerleave', leave);
+    return () => {
+      canvas.removeEventListener('pointerdown', down);
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', cancel);
+      canvas.removeEventListener('pointerleave', leave);
+      view.current.pressing = false;
+      sim.release();
+      sim.spinning = false;
+    };
+  }, [gl, camera, sim]);
+
   return (
     <>
       <ReferenceCamera />
-      <RoomLighting selected={Boolean(selected)} shadowsEnabled={sorted.length > 0} />
-      <group ref={railGroup}>
+      <RoomLighting selected={Boolean(selected)} shadowsEnabled={sorted.length > 0} stage={stage} />
+      <group>
         {sorted.map((product, index) => (
           <HangingJersey
             key={product.id}
             product={product}
-            x={displayPositions[index]}
-            selected={selected?.id === product.id}
-            hovered={hoveredIndex === index}
-            dragging={dragging && !drag.current?.mobile && drag.current?.id === product.id}
-            railVelocity={railVelocity}
-            waveIndex={index}
-            clearance={Math.min(
-              index
-                ? displayPositions[index] - displayPositions[index - 1] - 0.075
-                : displayPositions[index] - bounds.min + 0.06,
-              index < sorted.length - 1
-                ? displayPositions[index + 1] - displayPositions[index] - 0.075
-                : bounds.max - displayPositions[index] + 0.06,
-            )}
-            rotation={rotation}
-            onSelect={onSelect}
-            onHover={hoverJersey}
-            onDragStart={startDrag}
-            onDrag={moveDrag}
-            onDragEnd={endDrag}
+            index={index}
+            sim={sim}
+            stage={stage}
+            selected={selectedIndex === index}
+            hovered={!selected && hoveredIndex === index}
+            showHoverCard={!isMobile}
+            registerGroup={registerGroup}
           />
         ))}
         {!selected &&
@@ -605,7 +707,7 @@ function Scene({
               .filter(({ product }) => product.position === position);
             if (!members.length) return null;
             const x =
-              members.reduce((sum, { index }) => sum + displayPositions[index], 0) / members.length;
+              members.reduce((sum, { index }) => sum + (initialPositions[index] ?? 0), 0) / members.length;
             return (
               <Html
                 key={position}
@@ -621,7 +723,7 @@ function Scene({
               </Html>
             );
           })}
-        {!selected && filter === 'ALL' && (
+        {!selected && filter === 'ALL' && !isMobile && (
           <Html
             position={[0, 2.04, 0]}
             center
@@ -660,11 +762,11 @@ export default function ReferenceScene(props: SceneProps) {
         <Canvas
           shadows
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
-          dpr={[1, 1.5]}
-          gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
+          dpr={[1, 2]}
+          gl={{ antialias: true, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
           fallback={fallback}
-          onPointerMissed={() => props.onSelect(null)}
         >
+          <AdaptiveQuality min={1} max={2} />
           <Suspense fallback={null}>
             <Scene {...props} />
           </Suspense>
