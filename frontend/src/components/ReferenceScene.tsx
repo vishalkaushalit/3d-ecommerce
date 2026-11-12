@@ -436,8 +436,56 @@ function Scene({
     view.current.focus = next;
     live.current.onHover(live.current.sorted[next] ?? null);
   };
-  const tick = useRef({ applyView, railToScreen, nearestToCenter, focus });
-  tick.current = { applyView, railToScreen, nearestToCenter, focus };
+  /**
+   * Where the opened shirt hangs beside the squad sheet. As on Garuda: keep the
+   * usual spot if the whole shirt clears the sheet. Otherwise (tall or narrow
+   * windows, where the sheet takes over half the screen) center it in the free
+   * space left of the sheet, and move it back from the camera until it fits.
+   */
+  const stageFit = useRef({ key: '', x: 0, z: DESKTOP_STAGE.z });
+  const desktopStage = () => {
+    const preferred = { x: size.width > 900 ? -0.53 : 0, z: DESKTOP_STAGE.z };
+    const sheet = gl.domElement.ownerDocument.querySelector<HTMLElement>('.ref-squad');
+    if (!sheet) return stageFit.current.key ? stageFit.current : preferred;
+    const key = `${size.width}x${size.height}`;
+    if (stageFit.current.key === key) return stageFit.current;
+    // offsetLeft ignores the sheet's entry animation transform.
+    const parentLeft = (sheet.offsetParent as HTMLElement | null)?.getBoundingClientRect().left ?? 0;
+    const sheetLeft = sheet.offsetLeft + parentLeft - gl.domElement.getBoundingClientRect().left;
+    const margin = 24;
+    const shirtHalf = 0.31; // half the shirt's width across the sleeves
+    const midY = DESKTOP_STAGE.y - 0.4;
+    const toScreen = (x: number, z: number) => {
+      tools.point.set(x, midY, z).project(camera);
+      return (tools.point.x * 0.5 + 0.5) * size.width;
+    };
+    const toWorld = (screenX: number, z: number) => {
+      tools.point.set(0, midY, z).project(camera);
+      tools.ndc.set((screenX / size.width) * 2 - 1, tools.point.y);
+      tools.raycaster.setFromCamera(tools.ndc, camera);
+      tools.plane.constant = -z;
+      const hit = tools.raycaster.ray.intersectPlane(tools.plane, tools.point);
+      tools.plane.constant = 0;
+      return hit ? hit.x : 0;
+    };
+    let fit = preferred;
+    const fits =
+      toScreen(preferred.x - shirtHalf, preferred.z) >= margin &&
+      toScreen(preferred.x + shirtHalf, preferred.z) <= sheetLeft - margin;
+    if (!fits) {
+      const free = Math.max(120, sheetLeft - margin * 2);
+      const halfPx = toScreen(shirtHalf, DESKTOP_STAGE.z) - toScreen(0, DESKTOP_STAGE.z);
+      const cameraZ = camera.position.z;
+      // On-screen size falls off with distance from the camera.
+      const needed = (halfPx * 2 * (cameraZ - DESKTOP_STAGE.z)) / free;
+      const z = MathUtils.clamp(cameraZ - needed, 0.6, DESKTOP_STAGE.z);
+      fit = { x: toWorld(Math.max(free, sheetLeft) / 2, z), z };
+    }
+    stageFit.current = { key, ...fit };
+    return stageFit.current;
+  };
+  const tick = useRef({ applyView, railToScreen, nearestToCenter, focus, desktopStage });
+  tick.current = { applyView, railToScreen, nearestToCenter, focus, desktopStage };
 
   // Step the physics and the camera before the jerseys read them (negative priority runs first).
   useFrame((_state, rawDelta) => {
@@ -464,7 +512,8 @@ function Scene({
       if (tools.raycaster.ray.intersectPlane(tools.plane, tools.point)) stage.copy(tools.point);
       tools.plane.constant = 0;
     } else {
-      stage.set(size.width > 900 ? -0.53 : 0, DESKTOP_STAGE.y, DESKTOP_STAGE.z);
+      const fit = tick.current.desktopStage();
+      stage.set(fit.x, DESKTOP_STAGE.y, fit.z);
     }
   }, -1);
 
