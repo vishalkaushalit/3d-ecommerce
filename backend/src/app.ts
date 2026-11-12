@@ -9,6 +9,7 @@ import type { Collection, Product, Order, OrderStatus } from '../../shared/types
 export const app = express();
 app.disable('x-powered-by');
 if (process.env.VERCEL) app.set('trust proxy', 1);
+app.use('/api/admin/products', requireAdmin, express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '64kb' }));
 const defaultAllowedOrigins = [
   'http://127.0.0.1:5173',
@@ -58,7 +59,10 @@ const collectionSchema = z.object({
   description: text.max(1000),
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
 });
+const designImage = z.string().max(750000).regex(/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/).optional();
 const productSchema = z.object({
+  frontDesign: designImage,
+  backDesign: designImage,
   name: text,
   collectionId: text,
   description: z.string().trim().min(1).max(3000),

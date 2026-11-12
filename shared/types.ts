@@ -7,6 +7,8 @@ export type Product = {
   price: number;
   color: string;
   kit: 'home' | 'gk';
+  frontDesign?: string;
+  backDesign?: string;
   player: string;
   number: string;
   sizes: string[];

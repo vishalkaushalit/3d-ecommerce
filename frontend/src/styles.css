@@ -499,6 +499,9 @@ svg {
     radial-gradient(ellipse at 50% 30%, #f2e28c, #c0a441 65%, #a48723);
   color: #353828;
 }
+.uploaded-jersey-art {
+  object-fit: fill;
+}
 .jersey-neck {
   position: absolute;
   left: 40%;

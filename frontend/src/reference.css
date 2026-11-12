@@ -2080,3 +2080,26 @@
   color: #f6faf98c;
   letter-spacing: 0.5px;
 }
+
+/* Desktop room proportions follow the full-width campaign view. */
+@media (min-width: 1024px) {
+  .ref-rail-champions {
+    font-family: Reference Champions, Arial, sans-serif;
+    font-size: clamp(32px, 2.8vw, 80px);
+    font-weight: 900;
+  }
+  .reference-home:not(.ref-detail) .ref-hint {
+    bottom: max(74px, 10.5vh);
+    font-size: clamp(12px, 0.9vw, 25px);
+  }
+  .ref-ticker {
+    height: clamp(46px, 6.7vh, 92px);
+  }
+  .ref-ticker span {
+    font-size: clamp(19px, 1.3vw, 36px);
+  }
+  .reference-home:not(.ref-detail) .ref-sound,
+  .reference-home:not(.ref-detail) .ref-next {
+    bottom: max(64px, 8vh);
+  }
+}

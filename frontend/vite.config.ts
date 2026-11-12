@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
-    server: { proxy: { '/api': 'http://127.0.0.1:4000' } },
+    server: { proxy: { '/api': 'http://localhost:4000' } },
     build: { chunkSizeWarningLimit: 1200 },
   };
 });

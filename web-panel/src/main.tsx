@@ -18,6 +18,22 @@ import type { Product, Collection, Order, Contact, OrderStatus } from '../../sha
 import { api, formatPrice } from './api';
 import './styles.css';
 
+async function readDesign(file: File): Promise<string> {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024)
+    throw new Error('Choose a PNG, JPEG, or WebP image smaller than 10 MB.');
+  const bitmap = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const image = canvas.toDataURL('image/webp', 0.88);
+    if (image.length > 750000) throw new Error('This design is too detailed. Please use a smaller image.');
+    return image;
+  } finally { bitmap.close(); }
+}
+
 type Tab = 'Overview' | 'Products' | 'Collections' | 'Orders' | 'Messages';
 const tabs = [
   { name: 'Overview', icon: LayoutDashboard },
@@ -124,6 +140,14 @@ function App() {
       data.sizes = form.getAll('sizes');
     }
     void runAction(async () => {
+      if (editor.type === 'products') {
+        for (const side of ['frontDesign', 'backDesign'] as const) {
+          const file = form.get(side);
+          data[side] = form.has(`remove-${side}`) ? undefined : (editor.record as Product | undefined)?.[side];
+          if (file instanceof File && file.size) data[side] = await readDesign(file);
+          delete data[`remove-${side}`];
+        }
+      }
       await api(`/admin/${editor.type}${editor.record ? `/${editor.record.id}` : ''}`, {
         method: editor.record ? 'PUT' : 'POST',
         body: JSON.stringify(data),
@@ -601,7 +625,7 @@ function App() {
               </label>
               <div className="form-grid">
                 <label>
-                  Display color
+                  Jersey / collection color
                   <input
                     name="color"
                     type="color"
@@ -631,6 +655,21 @@ function App() {
               </div>
               {editor.type === 'products' && (
                 <>
+                  <fieldset>
+                    <legend>Upload jersey artwork</legend>
+                    <p>Use flat, tightly cropped front and back artwork. Each image covers one side of the existing 3D jersey; photos may stretch. Include any names, numbers, and logos in your artwork.</p>
+                    {(['frontDesign', 'backDesign'] as const).map((side) => (
+                      <label key={side} style={{ display: 'block', marginBottom: 16 }}>
+                        {side === 'frontDesign' ? 'Front artwork' : 'Back artwork'}
+                        <input type="file" name={side} accept="image/png,image/jpeg,image/webp" />
+                        {productRecord?.[side] && <>
+                          <img src={productRecord[side]} alt="Saved jersey artwork" style={{ width: 100, height: 100, objectFit: 'contain' }} />
+                          <span><input type="checkbox" name={`remove-${side}`} /> Remove saved artwork</span>
+                        </>}
+                      </label>
+                    ))}
+                    <p>PNG, JPEG, or WebP, up to 10 MB each. Save, then refresh the storefront. Unuploaded sides retain the standard jersey design.</p>
+                  </fieldset>
                   <div className="form-grid">
                     <label>
                       Price (USD)
@@ -717,8 +756,9 @@ function App() {
                     Show on the homepage rail
                   </label>
                   <p className="form-note">
-                    Model chooses the jersey fabric. Display color is used for collection styling
-                    and admin swatches.
+                    The selected model chooses the base jersey pattern. Uploaded artwork replaces the
+                    design on that side, while the selected color applies to sides without artwork.
+                    Refresh the storefront after saving to see your changes.
                   </p>
                 </>
               )}

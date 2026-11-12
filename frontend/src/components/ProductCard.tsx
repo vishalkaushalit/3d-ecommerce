@@ -4,9 +4,21 @@ import type { Product } from '../../../shared/types';
 import { useStore } from '../StoreContext';
 import { formatPrice } from '../api';
 export function JerseyArtwork({ product, back = false }: { product: Product; back?: boolean }) {
+  const uploadedDesign = back ? product.backDesign : product.frontDesign;
+  if (uploadedDesign) {
+    return (
+      <img
+        className={`jersey-art uploaded-jersey-art ${product.kit === 'gk' ? 'jersey-gk' : ''}`}
+        src={uploadedDesign}
+        style={{ background: product.color }}
+        alt={`${product.name}, uploaded ${back ? 'back' : 'front'} artwork`}
+      />
+    );
+  }
   return (
     <div
       className={`jersey-art ${product.kit === 'gk' ? 'jersey-gk' : ''}`}
+      style={{ background: `linear-gradient(135deg, #ffffff24, transparent 40%, #00000055), ${product.color}` }}
       aria-label={`${product.name}, ${back ? 'back' : 'front'} view`}
     >
       <div className="jersey-neck" />

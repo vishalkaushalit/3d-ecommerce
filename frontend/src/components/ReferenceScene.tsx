@@ -1,7 +1,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Environment, Html, useProgress } from '@react-three/drei';
-import { Group, MathUtils, PerspectiveCamera } from 'three';
+import { Environment, Html, useGLTF, useProgress } from '@react-three/drei';
+import { DirectionalLight, Group, MathUtils, Mesh, PerspectiveCamera, ShadowMaterial, SpotLight } from 'three';
+import roomSettings from '../../public/assets/reference/room.json';
 import type { Product } from '../../../shared/types';
 import { referencePlayers } from '../../../shared/referencePlayers';
 import { JerseyModel, assetUrl } from './JerseyModel';
@@ -60,6 +61,71 @@ function LoadingProgress({ onProgress }: { onProgress: (progress: number) => voi
   return null;
 }
 
+function RoomLighting({ selected }: { selected: boolean }) {
+  const key = useRef<SpotLight>(null);
+  const fillLight = useRef<SpotLight>(null);
+  const { size } = useThree();
+  const detailTarget = useMemo(() => new Group(), []);
+  useFrame((_state, delta) => {
+    detailTarget.position.set(size.width > 900 ? -0.53 : 0, 1.25, 2.55);
+    if (key.current) key.current.intensity = MathUtils.damp(key.current.intensity, selected ? 18 : 0, 8, delta);
+    if (fillLight.current) fillLight.current.intensity = MathUtils.damp(fillLight.current.intensity, selected ? 5 : 0, 8, delta);
+  });
+  const { scene } = useGLTF(assetUrl('reference/room.glb'));
+  const lighting = useMemo(() => {
+    const group = new Group();
+    roomSettings.spots.forEach((spot, index) => {
+      const light = new SpotLight(16771798, 11, 9, MathUtils.degToRad(spot.cone / 2), spot.blend, 2);
+      light.position.set(spot.pos[0], spot.pos[2], -spot.pos[1]);
+      light.target.position.set(spot.target[0], spot.target[2], -spot.target[1]);
+      light.castShadow = index % 2 === 0;
+      light.shadow.mapSize.set(1536, 1536);
+      light.shadow.bias = -0.0004;
+      light.shadow.normalBias = 0.01;
+      light.shadow.radius = 6;
+      light.shadow.camera.near = 0.5;
+      light.shadow.camera.far = 6;
+      group.add(light, light.target);
+    });
+    const fill = new DirectionalLight(12572927, 0.55);
+    fill.position.set(-3.2, 2.6, -0.9);
+    fill.target.position.set(-0.4, 1.5, 0);
+    group.add(fill, fill.target);
+    return group;
+  }, []);
+  const room = useMemo(() => {
+    const model = scene.clone(true);
+    const dark = new ShadowMaterial({ color: 0, opacity: 0.5 });
+    const soft = new ShadowMaterial({ color: 0, opacity: 0.14 });
+    model.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      if (/^Part/.test(object.name)) { object.visible = false; return; }
+      object.material = /^(Back|Shelf|Upper)/.test(object.name) ? soft : dark;
+      object.receiveShadow = true;
+    });
+    return { model, dark, soft };
+  }, [scene]);
+  useEffect(() => () => {
+    room.dark.dispose();
+    room.soft.dispose();
+    lighting.traverse((object) => {
+      if (object instanceof SpotLight || object instanceof DirectionalLight) object.dispose();
+    });
+  }, [room, lighting]);
+  return <>
+    <primitive object={detailTarget} />
+    <spotLight ref={key} position={[2.5, 2.9, 4.1]} target={detailTarget}
+      intensity={0} distance={12} angle={MathUtils.degToRad(35)} penumbra={0.65} decay={2}
+      color="#fff4e7" />
+    <spotLight ref={fillLight} position={[-1.9, 2.5, 4]} target={detailTarget}
+      intensity={0} distance={10} angle={MathUtils.degToRad(40)} penumbra={0.7} decay={2}
+      color="#cfe3ff" />
+    <primitive object={lighting} />
+    <primitive object={room.model} dispose={null} />
+    <Environment files={assetUrl('reference/probe_512.hdr')} environmentIntensity={0.55} />
+  </>;
+}
+
 type HangingJerseyProps = {
   product: Product;
   x: number;
@@ -74,7 +140,7 @@ type HangingJerseyProps = {
   onHover: (product: Product | null) => void;
   onDragStart: (id: string) => void;
   onDrag: (id: string, delta: number) => void;
-  onDragEnd: () => void;
+  onDragEnd: () => boolean;
 };
 
 function HangingJersey({
@@ -124,7 +190,12 @@ function HangingJersey({
       14,
       delta,
     );
-    model.position.y = MathUtils.damp(model.position.y, selected ? 1.86 : 1.95, 8, delta);
+    // Move the hanger and fabric together with a subtle, slow idle bob.
+    const idleBob = reducedMotion.current || dragging || press.current
+      ? 0
+      : Math.sin(_state.clock.elapsedTime * (Math.PI * 2 / 4.8) + waveIndex * 0.65)
+        * (selected ? 0.009 : 0.003);
+    model.position.y = MathUtils.damp(model.position.y, (selected ? 1.86 : 1.95) + idleBob, 8, delta);
     model.position.z = MathUtils.damp(model.position.z, selected ? 2.55 : 0, 8, delta);
     // The hanger never receives this rotation. Only the cloth turns around its neck.
     cloth.current.rotation.y = MathUtils.damp(
@@ -176,18 +247,28 @@ function HangingJersey({
   }
   function finishDrag() {
     press.current = null;
-    onDragEnd();
+    const mobileDrag = onDragEnd();
     gl.domElement.style.cursor = 'grab';
+    return mobileDrag;
   }
   function pointerUp(event: ThreeEvent<PointerEvent>) {
     if (!press.current) return;
     event.stopPropagation();
     const moved = press.current.moved;
     (event.target as Element).releasePointerCapture(event.pointerId);
-    finishDrag();
+    const mobileDrag = finishDrag();
     if (!moved) {
       if (selected) angle.current += Math.PI;
       else onSelect(product);
+    } else if (
+      !selected &&
+      !mobileDrag &&
+      event.clientX >= 0 &&
+      event.clientX <= size.width &&
+      event.clientY >= 0 &&
+      event.clientY <= size.height
+    ) {
+      onSelect(product);
     }
     console.log(
       selected ? '[rotateJersey]' : moved ? '[slideJerseys]' : '[selectJersey]',
@@ -279,7 +360,7 @@ function Scene({
         1.75,
         ((sorted.length - 1) * mobileSpacing + Math.max(0, groupCount - 1) * 0.28) / 2 + 0.2,
       )
-    : Math.min(1.7, worldWidth / 2 - 0.14);
+    : worldWidth / 2 - 0.14;
   const bounds: RailBounds = {
     min: -halfWidth,
     max: halfWidth,
@@ -322,8 +403,15 @@ function Scene({
         ? (result[defLastIndex] + result[midFirstIndex]) / 2
         : (result[0] + result[result.length - 1]) / 2;
 
+    if (!isMobile) {
+      // Fill the desktop rail while reserving room for the end jerseys' sleeves.
+      const span = result[result.length - 1] - result[0];
+      const midpoint = (result[0] + result[result.length - 1]) / 2;
+      const availableSpan = Math.max(0.5, worldWidth * 0.88 - 0.18);
+      return result.map((x) => ((x - midpoint) / span) * availableSpan);
+    }
     return result.map((x) => x - center);
-  }, [visibleIds, isMobile, mobileSpacing, groupCount]);
+  }, [visibleIds, isMobile, mobileSpacing, groupCount, worldWidth]);
   const [railPositions, setRailPositions] = useState(initialPositions);
   const [dragging, setDragging] = useState(false);
   const railGroup = useRef<Group>(null);
@@ -453,7 +541,7 @@ function Scene({
       });
     }
   }
-  function endDrag() {
+  function endDrag(): boolean {
     if (dragFrame.current !== null) {
       cancelAnimationFrame(dragFrame.current);
       dragFrame.current = null;
@@ -474,6 +562,7 @@ function Scene({
     }
     railMomentum.current = 0;
     setDragging(false);
+    return Boolean(activeDrag?.mobile);
   }
   function hoverJersey(product: Product | null) {
     if (!drag.current) onHover(product);
@@ -481,10 +570,7 @@ function Scene({
   return (
     <>
       <ReferenceCamera />
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[-2, 4, 3]} intensity={2.5} color="#ffe4bd" />
-      <directionalLight position={[3, 3, 2]} intensity={1.7} color="#fff3db" />
-      <Environment files={assetUrl('reference/probe_512.hdr')} environmentIntensity={0.55} />
+      <RoomLighting selected={Boolean(selected)} />
       <group ref={railGroup}>
         {sorted.map((product, index) => (
           <HangingJersey
@@ -572,6 +658,7 @@ export default function ReferenceScene(props: SceneProps) {
     <SceneBoundary fallback={fallback}>
       <Suspense fallback={null}>
         <Canvas
+          shadows
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
           dpr={[1, 1.5]}
           gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
