@@ -24,7 +24,8 @@ import { RailSim, type Hanger } from './railSim';
 import { createClothMotion, createClothUniforms, updateClothMotion } from './clothMotion';
 import { clampDelta } from './spring';
 import { AdaptiveQuality } from './AdaptiveQuality';
-import { isLowPowerDevice } from './device';
+import { isIOSDevice, isLowPowerDevice } from './device';
+import { WebGLGuard } from './WebGLGuard';
 
 export const positions = ['GK', 'DEF', 'MID', 'FWD'] as const;
 export const positionNames = {
@@ -146,7 +147,7 @@ function RoomLighting({
       intensity={0} distance={12} angle={MathUtils.degToRad(22)} penumbra={0.65} decay={2}
       color="#fff4e7"
       castShadow={shadowsEnabled}
-      shadow-mapSize={isLowPowerDevice ? [1024, 1024] : [2048, 2048]}
+      shadow-mapSize={isLowPowerDevice ? [512, 512] : [2048, 2048]}
       shadow-bias={-0.0003}
       shadow-normalBias={0.012}
       shadow-radius={4}
@@ -841,18 +842,18 @@ function Scene({
   );
 }
 
-export default function ReferenceScene(props: SceneProps) {
-  const fallback = (
+function RailFallback({ products, filter, onReady, onSelect }: SceneProps) {
+  // A failed Canvas must also dismiss the loader; otherwise the fallback buttons
+  // are covered by the entry screen and the visitor cannot reach the store.
+  useEffect(onReady, [onReady]);
+  return (
     <div className="ref-fallback">
-      {props.products
-        .filter((product) => props.filter === 'ALL' || product.position === props.filter)
+      {products
+        .filter((product) => filter === 'ALL' || product.position === filter)
         .map((product) => (
           <button
             key={product.id}
-            onClick={() => {
-              props.onReady();
-              props.onSelect(product);
-            }}
+            onClick={() => onSelect(product)}
           >
             <JerseyArtwork product={product} back />
             <span>{product.player}</span>
@@ -860,17 +861,23 @@ export default function ReferenceScene(props: SceneProps) {
         ))}
     </div>
   );
+}
+
+export default function ReferenceScene(props: SceneProps) {
+  const fallback = <RailFallback {...props} />;
+  const maxDpr = isIOSDevice ? 1 : isLowPowerDevice ? 1.5 : 2;
   return (
     <SceneBoundary fallback={fallback}>
       <Suspense fallback={null}>
         <Canvas
           shadows
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
-          dpr={isLowPowerDevice ? [1, 1.5] : [1, 2]}
+          dpr={[1, maxDpr]}
           gl={{ antialias: !isLowPowerDevice, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
           fallback={fallback}
         >
-          <AdaptiveQuality min={1} max={isLowPowerDevice ? 1.5 : 2} />
+          <WebGLGuard />
+          <AdaptiveQuality min={isIOSDevice ? 0.75 : 1} max={maxDpr} />
           <Suspense fallback={null}>
             <Scene {...props} />
           </Suspense>

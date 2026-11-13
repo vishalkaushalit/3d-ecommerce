@@ -7,6 +7,8 @@ import type { Product } from '../../../shared/types';
 import { JerseyModel } from './JerseyModel';
 import { SceneBoundary } from './SceneBoundary';
 import { JerseyArtwork } from './ProductCard';
+import { WebGLGuard } from './WebGLGuard';
+import { isIOSDevice, isLowPowerDevice } from './device';
 
 function RotatingJersey({ product, rotation }: { product: Product; rotation: number }) {
   const group = useRef<Group>(null);
@@ -36,16 +38,18 @@ export default function ProductViewer({ product }: { product: Product }) {
         <Suspense fallback={<div className="scene-loading">Loading every detail…</div>}>
           <Canvas
             camera={{ position: [0, 0, 4.5], fov: 42 }}
-            dpr={[1, 1.5]}
+            dpr={[1, isIOSDevice ? 1 : 1.5]}
+            gl={{ antialias: !isLowPowerDevice }}
             shadows
             fallback={fallback}
           >
+            <WebGLGuard />
             <ambientLight intensity={1.6} />
             <directionalLight
               position={[3, 5, 5]}
               intensity={3}
               castShadow
-              shadow-mapSize={[1024, 1024]}
+              shadow-mapSize={isLowPowerDevice ? [512, 512] : [1024, 1024]}
             />
             <directionalLight position={[-3, 2, -4]} intensity={1.4} />
             <RotatingJersey product={product} rotation={rotation} />

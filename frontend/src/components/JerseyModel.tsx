@@ -1,6 +1,6 @@
-import { useMemo, useEffect, useState, type RefObject } from 'react';
-import { useGLTF, useTexture } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { use, useLayoutEffect, useState, type RefObject } from 'react';
+import { useGLTF } from '@react-three/drei';
+import { useLoader, useThree } from '@react-three/fiber';
 import {
   CanvasTexture,
   Color,
@@ -9,10 +9,15 @@ import {
   Mesh,
   MeshStandardMaterial,
   SRGBColorSpace,
+  TextureLoader,
   Vector2,
 } from 'three';
 import homeInnerUrl from '../../public/assets/home_inner.png';
 import gkInnerUrl from '../../public/assets/gk_inner.png';
+import homeMobileColorUrl from '../assets/mobile/home_color.png';
+import gkMobileColorUrl from '../assets/mobile/gk_color.png';
+import homeMobileNormalUrl from '../assets/mobile/home_normal.png';
+import gkMobileNormalUrl from '../assets/mobile/gk_normal.png';
 import type { Product } from '../../../shared/types';
 import { clothShader, type ClothUniforms } from './clothMotion';
 import { isLowPowerDevice } from './device';
@@ -20,16 +25,27 @@ import { isLowPowerDevice } from './device';
 export const assetUrl = (file: string) =>
   `${(import.meta.env.VITE_ASSET_BASE_URL || '/assets').replace(/\/$/, '')}/${file}`;
 
-// Every jersey gets its own painted atlas. At the source 4096x2048 size that is
-// ~43 MB of GPU memory each (with mipmaps); a full squad on a phone exhausts GPU
-// memory and the uploads silently fail, rendering the shirts black.
+// Load lettering before allocating atlases: font completion must not rebuild
+// all 23 canvases/materials and temporarily double their memory at startup.
+let jerseyFont: Promise<void> | undefined;
+function loadJerseyFont() {
+  return jerseyFont ??= document.fonts.load('700 48px "Reference Number"').then(
+    () => undefined,
+    () => undefined, // Keep shopping available with fallback lettering if the font fails.
+  );
+}
+
+// A 1024x512 mobile atlas takes ~2.67 MiB with mipmaps, versus ~10.67 MiB
+// at 2048x1024. There is also a CPU canvas backing store for each jersey.
 type ColorBin = { weight: number; red: number; green: number; blue: number };
 
 function getDominantDesignColor(images: CanvasImageSource[]): string | undefined {
+  if (!images.length) return undefined;
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
-  const context = canvas.getContext('2d', { willReadFrequently: true })!;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new Error('Unable to allocate jersey color canvas');
   const bins = new Map<number, ColorBin>();
   for (const image of images) {
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -55,6 +71,7 @@ function getDominantDesignColor(images: CanvasImageSource[]): string | undefined
   for (const bin of bins.values()) {
     if (!dominant || bin.weight > dominant.weight) dominant = bin;
   }
+  canvas.width = canvas.height = 0;
   if (!dominant) return undefined;
   const color = dominant;
   return `#${[color.red, color.green, color.blue]
@@ -74,27 +91,43 @@ export function JerseyModel({
   clothUniforms?: ClothUniforms;
   receiveShadows?: boolean;
 }) {
-  const [fontReady, setFontReady] = useState(false);
-  useEffect(() => {
-    void document.fonts.load('700 48px "Reference Number"').then(() => setFontReady(true));
-  }, []);
+  use(loadJerseyFont());
   const { scene } = useGLTF(assetUrl(product.kit === 'gk' ? 'jersey_gk.glb' : 'jersey.glb'));
-  const baseTextureUrl = assetUrl(`${product.kit}_color.webp`);
-  const [baseTexture, normalTexture, innerTexture, frontDesignTexture, backDesignTexture] = useTexture([
+  // Bundle these smaller sources so an existing external asset CDN needs no update.
+  // Resizing only the painted atlas still decodes the original 4K source images.
+  const baseTextureUrl = isLowPowerDevice
+    ? (product.kit === 'gk' ? gkMobileColorUrl : homeMobileColorUrl)
+    : assetUrl(`${product.kit}_color.webp`);
+  const normalTextureUrl = isLowPowerDevice
+    ? (product.kit === 'gk' ? gkMobileNormalUrl : homeMobileNormalUrl)
+    : assetUrl(`${product.kit}_normal.webp`);
+  // useTexture eagerly uploads every input, including CPU-only artwork. Only the
+  // finished atlas, normal map and lining should occupy GPU memory.
+  const [baseTexture, normalTexture, innerTexture] = useLoader(TextureLoader, [
     baseTextureUrl,
-    assetUrl(`${product.kit}_normal.webp`),
+    normalTextureUrl,
     product.kit === 'gk' ? gkInnerUrl : homeInnerUrl,
+  ]);
+  // Share the kit textures even when every player's uploaded artwork differs.
+  const [frontDesignTexture, backDesignTexture] = useLoader(TextureLoader, [
     product.frontDesign || baseTextureUrl,
     product.backDesign || baseTextureUrl,
   ]);
   const maxTextureSize = useThree((state) => state.gl.capabilities.maxTextureSize);
-  const { model, jersey, materials, texture } = useMemo(() => {
+  const [models, setModels] = useState<{ model: Group; jersey: Group } | null>(null);
+  // Allocate after commit. A render-time useMemo can be discarded by Suspense
+  // or StrictMode without ever running a cleanup for its canvas.
+  useLayoutEffect(() => {
     const canvas = document.createElement('canvas');
-    const atlasLimit = Math.min(maxTextureSize, isLowPowerDevice ? 2048 : 4096);
+    const atlasLimit = Math.min(maxTextureSize, isLowPowerDevice ? 1024 : 4096);
     const atlasScale = Math.min(1, atlasLimit / Math.max(baseTexture.image.width, baseTexture.image.height));
     canvas.width = Math.round(baseTexture.image.width * atlasScale);
     canvas.height = Math.round(baseTexture.image.height * atlasScale);
-    const context = canvas.getContext('2d')!;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      canvas.width = canvas.height = 0;
+      throw new Error('Unable to allocate jersey texture canvas');
+    }
     context.drawImage(baseTexture.image, 0, 0, canvas.width, canvas.height);
     const originalColor = product.kit === 'gk' ? '#168a9c' : '#a72227';
     const designImages: CanvasImageSource[] = [];
@@ -227,7 +260,15 @@ export function JerseyModel({
         if (mesh) jersey.attach(mesh);
       }
     }
-    return { model, jersey, materials: [cloth, hanger, hook], texture };
+    setModels({ model, jersey });
+    return () => {
+      cloth.dispose();
+      hanger.dispose();
+      hook.dispose();
+      texture.dispose();
+      // GPU disposal does not release Safari's 2D canvas backing store.
+      canvas.width = canvas.height = 0;
+    };
   }, [
     scene,
     baseTexture,
@@ -241,19 +282,13 @@ export function JerseyModel({
     product.backDesign,
     product.number,
     product.player,
-    fontReady,
     maxTextureSize,
     clothRef,
     clothUniforms,
     receiveShadows,
   ]);
-  useEffect(
-    () => () => {
-      materials.forEach((material) => material.dispose());
-      texture.dispose();
-    },
-    [materials, texture],
-  );
+  if (!models) return null;
+  const { model, jersey } = models;
   return clothRef ? (
     <>
       <primitive object={model} name="hanger" rotation={[0, Math.PI / 2, 0]} dispose={null} />
