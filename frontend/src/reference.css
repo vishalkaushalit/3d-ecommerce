@@ -476,6 +476,8 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  padding: 72px 20px 90px;
+  overflow-y: auto;
 }
 .ref-entry-logo {
   height: 95px;
@@ -491,23 +493,104 @@
   color: #f6faf980;
   margin-bottom: 23px;
 }
+/* Matches the reference loader: a 600px rail of 23 hooks (26px apart), shirts
+   35×55 hanging from 9px hooks; on phones, two centred rows of 12 + 11. */
 .ref-entry-progress {
-  width: min(600px, 80vw);
+  width: min(600px, 100%);
+  flex-shrink: 0;
 }
-.ref-entry-progress > img {
-  width: 100%;
+.ref-entry-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.ref-entry-row {
+  position: relative;
+  display: flex;
+  width: calc(100% * var(--count) / var(--per-row));
   height: 60px;
-  object-fit: fill;
+  border-top: 1px solid #eab04b33;
 }
-.ref-entry-progress > div {
+.ref-entry-bar {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: #eab04b;
+  transform-origin: left;
+  transition: transform 260ms ease-out;
+}
+.ref-entry-hook {
+  position: relative;
+  flex: 1 1 0;
+}
+.ref-entry-hook > i {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 9px;
+  background: #eab04b40;
+  transition: background 200ms;
+}
+.ref-entry-hook > b {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 135%;
+  aspect-ratio: 64 / 100;
+  background-repeat: no-repeat;
+  background-size: 2300% 100%;
+  opacity: 0;
+  transform: translate(-50%, -8px) rotate(-6deg);
+  transform-origin: 50% 0;
+  transition:
+    opacity 300ms ease-out,
+    transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ref-entry-hook.is-in > i {
+  background: #eab04b;
+}
+.ref-entry-hook.is-in > b {
+  opacity: 1;
+  transform: translate(-50%, 0) rotate(0);
+}
+.ref-entry-status {
   display: flex;
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: 13px;
   font-size: 9px;
   letter-spacing: 1.8px;
+  transition:
+    opacity 400ms ease-out,
+    visibility 0s linear 0s;
 }
-.ref-entry-progress > div > span {
+/* As on the reference: once the rail is full, the count and label fade away. */
+.ref-entry-status.is-done {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 400ms ease-out 300ms,
+    visibility 0s linear 700ms;
+}
+.ref-entry-status > span {
   color: #eab04b;
+}
+@media (max-width: 700px) {
+  .ref-entry-progress {
+    width: min(600px, calc(100vw - 70px));
+  }
+  .ref-entry-hook > b {
+    width: 142%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ref-entry-hook > b {
+    transform: translate(-50%, 0);
+    transition: opacity 200ms linear;
+  }
 }
 .ref-entry-buttons {
   display: flex;
@@ -555,6 +638,22 @@
 .ref-entry-credit img {
   width: 110px;
   height: auto;
+}
+@media (max-height: 600px) {
+  .reference-home .ref-entry {
+    justify-content: flex-start;
+    padding-top: 32px;
+    padding-bottom: 24px;
+  }
+  .reference-home .ref-entry > * { flex-shrink: 0; }
+  .reference-home .ref-entry > .garuda-brand {
+    margin-top: 0;
+    margin-bottom: 12px;
+  }
+  .reference-home .ref-entry-credit {
+    position: static;
+    margin-top: 28px;
+  }
 }
 .ref-detail .ref-brand {
   opacity: 0.4;
@@ -1088,9 +1187,6 @@
   .ref-entry > p {
     font-size: 8px;
     letter-spacing: 2px;
-  }
-  .ref-entry-progress > img {
-    height: 37px;
   }
   .ref-entry-buttons {
     gap: 9px;

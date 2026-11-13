@@ -842,10 +842,18 @@ function Scene({
   );
 }
 
-function RailFallback({ products, filter, onReady, onSelect }: SceneProps) {
+function RailFallback({
+  products,
+  filter,
+  onReady,
+  onSelect,
+  signalReady = true,
+}: SceneProps & { signalReady?: boolean }) {
   // A failed Canvas must also dismiss the loader; otherwise the fallback buttons
   // are covered by the entry screen and the visitor cannot reach the store.
-  useEffect(onReady, [onReady]);
+  useEffect(() => {
+    if (signalReady) onReady();
+  }, [onReady, signalReady]);
   return (
     <div className="ref-fallback">
       {products
@@ -865,6 +873,10 @@ function RailFallback({ products, filter, onReady, onSelect }: SceneProps) {
 
 export default function ReferenceScene(props: SceneProps) {
   const fallback = <RailFallback {...props} />;
+  // R3F always mounts <Canvas fallback> inside the <canvas> element, even when
+  // WebGL works, so that copy must not report ready: it would end the loader
+  // before the jerseys have loaded. Real WebGL failures reach SceneBoundary.
+  const canvasFallback = <RailFallback {...props} signalReady={false} />;
   const maxDpr = isIOSDevice ? 1 : isLowPowerDevice ? 1.5 : 2;
   return (
     <SceneBoundary fallback={fallback}>
@@ -874,7 +886,7 @@ export default function ReferenceScene(props: SceneProps) {
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
           dpr={[1, maxDpr]}
           gl={{ antialias: !isLowPowerDevice, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
-          fallback={fallback}
+          fallback={canvasFallback}
         >
           <WebGLGuard />
           <AdaptiveQuality min={isIOSDevice ? 0.75 : 1} max={maxDpr} />

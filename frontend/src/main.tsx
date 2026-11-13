@@ -13,7 +13,10 @@ import './styles.css';
 import './store-theme.css';
 function App() {
   const { loading, error, refresh } = useStore();
-  if (loading) return <div className="app-loading" aria-busy="true" />;
+  // Mount the rail's branded loader while the API is loading too, so visitors
+  // see one continuous entrance instead of an empty spinner followed by it.
+  const railRoute = ['/', '/rail', '/rail/'].includes(window.location.pathname);
+  if (loading && !railRoute) return <div className="app-loading" aria-busy="true" />;
   if (error)
     return (
       <div className="empty-state">

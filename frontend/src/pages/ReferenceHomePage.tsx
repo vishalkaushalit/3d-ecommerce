@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { StoreHeader, StoreFooter, GarudaBrand } from '../components/StoreChrome';
+import { StoreHeader, StoreFooter } from '../components/StoreChrome';
+import { LockerLoader } from '../components/LockerLoader';
 import {
   Menu,
   X,
@@ -23,7 +24,7 @@ const assetUrl = (file: string) =>
 const positionNames = { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfielder', FWD: 'Forward' };
 
 export function ReferenceHomePage() {
-  const { products, cart, addToCart, toggleWishlist, wishlist, toast } = useStore();
+  const { products, cart, addToCart, toggleWishlist, wishlist, toast, loading } = useStore();
   const [filter, setFilter] = useState('ALL');
   const [selected, setSelected] = useState<Product | null>(null);
   const [hovered, setHovered] = useState<Product | null>(null);
@@ -468,32 +469,8 @@ export function ReferenceHomePage() {
         </div>
       )}
 
-      {(!ready || !entered) && (
-        <div className="ref-entry">
-          <GarudaBrand />
-          <p>INTERACTIVE 3D LOCKER ROOM</p>
-          <div className="ref-entry-progress">
-            <img src={assetUrl('shirts.webp')} alt="The 23-player jersey rail" />
-            <div>
-              <strong>
-                {ready ? '100' : Math.min(99, Math.round(progress)).toString().padStart(3, '0')}
-              </strong>
-              <span>{ready ? 'READY' : 'OPENING THE LOCKER ROOM'}</span>
-            </div>
-          </div>
-          <div className="ref-entry-buttons">
-            <button disabled={!ready} onClick={() => enterRoom(true)}>
-              <Volume2 size={17} /> ENTER WITH SOUND
-            </button>
-            <button disabled={!ready} onClick={() => enterRoom(false)}>
-              <VolumeX size={17} /> MUTED
-            </button>
-          </div>
-          <small>BEST WITH SOUND</small>
-          <div className="ref-entry-credit">
-            CRAFTED WITH 💛 <img src={assetUrl('screenagers-word.svg')} alt="Screenagers" />
-          </div>
-        </div>
+      {(!ready || loading || !entered) && (
+        <LockerLoader ready={ready && !loading} progress={loading ? 0 : progress} onEnter={enterRoom} />
       )}
       {toast && (
         <div className="toast" role="status">
