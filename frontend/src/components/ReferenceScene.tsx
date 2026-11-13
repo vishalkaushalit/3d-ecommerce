@@ -76,27 +76,6 @@ function LoadingProgress({ onProgress }: { onProgress: (progress: number) => voi
   return null;
 }
 
-/**
- * On phones, refresh the shadow maps every other frame. Each shadow-casting light
- * re-draws the whole squad, so this halves most of the per-frame geometry work;
- * the shadows are soft and the shirts move slowly, so the lag is not visible.
- */
-function ThrottledShadows() {
-  const gl = useThree((state) => state.gl);
-  const frame = useRef(0);
-  useEffect(() => {
-    gl.shadowMap.autoUpdate = false;
-    gl.shadowMap.needsUpdate = true;
-    return () => {
-      gl.shadowMap.autoUpdate = true;
-    };
-  }, [gl]);
-  useFrame(() => {
-    if (frame.current++ % 2 === 0) gl.shadowMap.needsUpdate = true;
-  });
-  return null;
-}
-
 function RoomLighting({
   selected,
   shadowsEnabled,
@@ -122,7 +101,9 @@ function RoomLighting({
       const light = new SpotLight(16771798, 11, 9, MathUtils.degToRad(spot.cone / 2), spot.blend, 2);
       light.position.set(spot.pos[0], spot.pos[2], -spot.pos[1]);
       light.target.position.set(spot.target[0], spot.target[2], -spot.target[1]);
-      light.castShadow = shadowsEnabled && index % 2 === 0;
+      // Phones use the single key-light shadow below, refreshed every frame.
+      // Skipping alternate frames leaves old silhouettes on moving fabric.
+      light.castShadow = shadowsEnabled && !isLowPowerDevice && index % 2 === 0;
       light.shadow.mapSize.setScalar(isLowPowerDevice ? 768 : 1536);
       light.shadow.bias = -0.0004;
       light.shadow.normalBias = 0.01;
@@ -276,7 +257,12 @@ function HangingJersey({
   });
   return (
     <group name={`rail-${product.id}`} ref={group}>
-      <JerseyModel product={product} clothRef={cloth} clothUniforms={clothUniforms} />
+      <JerseyModel
+        product={product}
+        clothRef={cloth}
+        clothUniforms={clothUniforms}
+        receiveShadows={!isLowPowerDevice}
+      />
       {showHoverCard && hovered && !selected && (
         <Html
           position={[0, -1.12, 0]}
@@ -325,6 +311,7 @@ function spreadOnRail(groupsInOrder: string[]) {
 }
 
 type Press = {
+  pointerId: number;
   x: number;
   y: number;
   time: number;
@@ -400,7 +387,7 @@ function Scene({
    * screen. On a phone it is zoomed in (up to 1.22x) and panned sideways in
    * pixels, so the rail stays real and the camera travels along it.
    */
-  const view = useRef({ pan: 0, maxPan: 0, focus: -1, detail: 0, swipeVelocity: 0, pressing: false });
+  const view = useRef({ pan: 0, maxPan: 0, focus: -1, detail: 0, swipeVelocity: 0, pressing: false, coasting: false });
   const stage = useMemo(() => new Vector3(0, DESKTOP_STAGE.y, DESKTOP_STAGE.z), []);
   const groups = useRef<(Group | null)[]>([]);
   const registerGroup = useCallback((index: number, group: Group | null) => {
@@ -438,12 +425,12 @@ function Scene({
     tools.point.set(x, RAIL_Y, 0).project(camera);
     return (tools.point.x * 0.5 + 0.5) * size.width;
   };
-  /** The shirt whose slot is closest to the screen center, shifted by `offset` pixels. */
-  const nearestToCenter = (offset = 0) => {
+  /** Find the closest actual shirt, including displacement from its neighbors. */
+  const nearestToCenter = () => {
     let best = 0;
     let bestDistance = Infinity;
     sim.hangers.forEach((hanger, index) => {
-      const distance = Math.abs(railToScreen(hanger.home) - size.width / 2 - offset);
+      const distance = Math.abs(railToScreen(hanger.x) - size.width / 2);
       if (distance < bestDistance) {
         bestDistance = distance;
         best = index;
@@ -455,6 +442,7 @@ function Scene({
     if (!sim.hangers.length) return;
     const next = Math.max(0, Math.min(sim.hangers.length - 1, index));
     if (next === view.current.focus) return;
+    view.current.coasting = false;
     view.current.focus = next;
     live.current.onHover(live.current.sorted[next] ?? null);
   };
@@ -520,11 +508,24 @@ function Scene({
     tick.current.applyView(MathUtils.lerp(browseZoom, 1, smoothstep(v.detail)));
 
     if (isMobile) {
+      if (!sim.selected && !v.pressing && v.coasting) {
+        // Integrate friction in seconds so 30/60/120 Hz devices travel the same distance.
+        const decay = Math.exp(-6 * delta);
+        const nextPan = v.pan + (v.swipeVelocity * 1000 * (1 - decay)) / 6;
+        v.pan = MathUtils.clamp(nextPan, -v.maxPan, v.maxPan);
+        v.swipeVelocity *= decay;
+        tick.current.applyView(MathUtils.lerp(browseZoom, 1, smoothstep(v.detail)));
+        if (Math.abs(v.swipeVelocity) < 0.025 || v.pan !== nextPan) {
+          v.coasting = false;
+          v.swipeVelocity = 0;
+          tick.current.focus(tick.current.nearestToCenter());
+        }
+      }
       // The focused shirt faces you, and the camera eases until it is centered.
-      if (!sim.selected && !v.pressing && sim.hangers[v.focus]) {
+      if (!sim.selected && !v.pressing && !v.coasting && sim.hangers[v.focus]) {
         sim.hover(sim.hangers[v.focus]);
         const target = v.pan + tick.current.railToScreen(sim.hangers[v.focus].x) - size.width / 2;
-        v.pan += (Math.max(-v.maxPan, Math.min(v.maxPan, target)) - v.pan) * Math.min(1, delta * 5);
+        v.pan = MathUtils.damp(v.pan, MathUtils.clamp(target, -v.maxPan, v.maxPan), 5, delta);
         tick.current.applyView(MathUtils.lerp(browseZoom, 1, smoothstep(v.detail)));
       }
       // Phone stage: the hook sits 11.5% from the top of the screen, 0.6 in front of the rail.
@@ -551,6 +552,8 @@ function Scene({
       return;
     }
     view.current.pan = 0;
+    view.current.coasting = false;
+    view.current.swipeVelocity = 0;
     view.current.focus = -1;
     // Start on the chosen group's first shirt (GK by default), else the middle of the rail.
     let start = filter === 'ALL' ? -1 : sorted.findIndex((product) => product.position === filter);
@@ -570,6 +573,8 @@ function Scene({
   useEffect(() => {
     const hanger = selectedIndex >= 0 ? sim.hangers[selectedIndex] : null;
     if (hanger && sim.selected !== hanger) {
+      view.current.coasting = false;
+      view.current.swipeVelocity = 0;
       sim.open(hanger);
       if (isMobile) view.current.focus = selectedIndex;
     } else if (!hanger && sim.selected) sim.close();
@@ -579,7 +584,10 @@ function Scene({
   const hoveredIndex = hovered ? sorted.findIndex((product) => product.id === hovered.id) : -1;
   useEffect(() => {
     if (isMobile) {
-      if (hoveredIndex >= 0) view.current.focus = hoveredIndex;
+      if (hoveredIndex >= 0) {
+        view.current.coasting = false;
+        view.current.focus = hoveredIndex;
+      }
     } else sim.hover(hoveredIndex >= 0 ? sim.hangers[hoveredIndex] : null);
   }, [sim, hoveredIndex, isMobile]);
 
@@ -636,6 +644,7 @@ function Scene({
     };
 
     const down = (event: PointerEvent) => {
+      if (press || !event.isPrimary) return;
       if (event.pointerType === 'mouse' && event.button !== 0) return;
       try {
         canvas.setPointerCapture(event.pointerId);
@@ -644,7 +653,7 @@ function Scene({
       }
       lastX = event.clientX;
       const now = performance.now();
-      const base: Press = { x: event.clientX, y: event.clientY, time: now, moved: false, mode: 'none', onShirt: false, lastTime: now };
+      const base: Press = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: now, moved: false, mode: 'none', onShirt: false, lastTime: now };
       if (sim.selected) {
         sim.spinning = true;
         press = { ...base, mode: 'spin', onShirt: overSelected(event.clientX, event.clientY) };
@@ -654,6 +663,7 @@ function Scene({
         // Phone: a finger on the rail pans the camera (the focused shirt keeps facing you).
         view.current.pressing = true;
         view.current.swipeVelocity = 0;
+        view.current.coasting = false;
         press = { ...base, mode: 'swipe' };
         return;
       }
@@ -671,9 +681,10 @@ function Scene({
     };
 
     const move = (event: PointerEvent) => {
-      const point = toRail(event.clientX, event.clientY);
+      if (!event.isPrimary || (press && press.pointerId !== event.pointerId)) return;
       if (!press) {
         if (!sim.selected && !live.current.isMobile) {
+          const point = toRail(event.clientX, event.clientY);
           setHover(point && sim.pick(point.x, point.y, RAIL_Y));
           updateCursor(event.clientX, event.clientY);
         }
@@ -687,18 +698,24 @@ function Scene({
       else if (press.mode === 'swipe') {
         const v = view.current;
         v.pan = Math.max(-v.maxPan, Math.min(v.maxPan, v.pan - dx));
-        // Swipe speed in px/ms, smoothed 60/40 so one noisy event can't fling it.
+        // Smooth px/ms velocity by elapsed time, independent of touch event frequency.
         const now = performance.now();
-        v.swipeVelocity = v.swipeVelocity * 0.6 + (-dx / Math.max(1, now - press.lastTime)) * 0.4;
+        const elapsed = Math.max(1, now - press.lastTime);
+        const velocity = MathUtils.clamp(-dx / elapsed, -2.5, 2.5);
+        v.swipeVelocity = MathUtils.lerp(v.swipeVelocity, velocity, 1 - Math.exp(-elapsed / 40));
         press.lastTime = now;
-      } else if (point && (press.mode === 'grab' || press.mode === 'sweep')) sim.dragTo(point.x);
+      } else if (press.mode === 'grab' || press.mode === 'sweep') {
+        const point = toRail(event.clientX, event.clientY);
+        if (point) sim.dragTo(point.x);
+      }
     };
 
     const finish = (event: PointerEvent, cancelled: boolean) => {
-      if (!press) return;
+      if (!press || press.pointerId !== event.pointerId) return;
       const current = press;
       press = null;
       view.current.pressing = false;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
       const tap = !cancelled && !current.moved && performance.now() - current.time < 450;
       const grabbed = sim.grabbed;
       sim.spinning = false;
@@ -717,8 +734,14 @@ function Scene({
           if (index >= 0 && index === view.current.focus) select(list[index] ?? null);
           else if (index >= 0) tick.current.focus(index);
         } else {
-          // Land on the shirt nearest the center, thrown further by a fast flick.
-          tick.current.focus(tick.current.nearestToCenter(view.current.swipeVelocity * 160));
+          // A held finger or cancelled touch must not launch an old flick.
+          const v = view.current;
+          v.swipeVelocity *= Math.exp(-Math.max(0, performance.now() - current.lastTime) / 80);
+          v.coasting = !cancelled && Math.abs(v.swipeVelocity) >= 0.025;
+          if (!v.coasting) {
+            v.swipeVelocity = 0;
+            tick.current.focus(tick.current.nearestToCenter());
+          }
         }
       } else if (current.mode === 'spin' && tap) {
         const group = selectedGroup();
@@ -746,14 +769,18 @@ function Scene({
     canvas.addEventListener('pointermove', move);
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', cancel);
+    canvas.addEventListener('lostpointercapture', cancel);
     canvas.addEventListener('pointerleave', leave);
     return () => {
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
       canvas.removeEventListener('pointercancel', cancel);
+      canvas.removeEventListener('lostpointercapture', cancel);
       canvas.removeEventListener('pointerleave', leave);
       view.current.pressing = false;
+      view.current.coasting = false;
+      view.current.swipeVelocity = 0;
       sim.release();
       sim.spinning = false;
     };
@@ -840,11 +867,10 @@ export default function ReferenceScene(props: SceneProps) {
           shadows
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
           dpr={isLowPowerDevice ? [1, 1.5] : [1, 2]}
-          gl={{ antialias: true, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
+          gl={{ antialias: !isLowPowerDevice, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
           fallback={fallback}
         >
           <AdaptiveQuality min={1} max={isLowPowerDevice ? 1.5 : 2} />
-          {isLowPowerDevice && <ThrottledShadows />}
           <Suspense fallback={null}>
             <Scene {...props} />
           </Suspense>

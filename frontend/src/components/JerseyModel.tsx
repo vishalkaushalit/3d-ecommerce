@@ -67,10 +67,12 @@ export function JerseyModel({
   product,
   clothRef,
   clothUniforms,
+  receiveShadows = true,
 }: {
   product: Product;
   clothRef?: RefObject<Group | null>;
   clothUniforms?: ClothUniforms;
+  receiveShadows?: boolean;
 }) {
   const [fontReady, setFontReady] = useState(false);
   useEffect(() => {
@@ -211,7 +213,9 @@ export function JerseyModel({
         object.material = object.name === 'Jersey' ? cloth : object.name === 'Hook' ? hook : hanger;
         // Keep the wooden support visible without casting a stripe on the fabric.
         object.castShadow = object.name === 'Jersey';
-        object.receiveShadow = true;
+        // Mobile rail shadows fall on the room, not the thin double-sided fabric.
+        // This avoids self-shadow acne as the shirt returns from the detail stage.
+        object.receiveShadow = receiveShadows;
       }
     });
     const jersey = new Group();
@@ -241,6 +245,7 @@ export function JerseyModel({
     maxTextureSize,
     clothRef,
     clothUniforms,
+    receiveShadows,
   ]);
   useEffect(
     () => () => {
