@@ -187,6 +187,7 @@ export function ReferenceHomePage() {
             hovered={hovered}
             onReady={onReady}
             onProgress={setProgress}
+            entered={entered}
           />
         </Suspense>
       </div>

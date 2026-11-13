@@ -45,6 +45,8 @@ type SceneProps = {
   reset: number;
   onReady: () => void;
   onProgress: (progress: number) => void;
+  /** False while the entry loader covers the room. */
+  entered?: boolean;
 };
 
 function ReferenceCamera() {
@@ -887,9 +889,13 @@ export default function ReferenceScene(props: SceneProps) {
           dpr={[1, maxDpr]}
           gl={{ antialias: !isLowPowerDevice, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
           fallback={canvasFallback}
+          // The room zooms from scale(1.035) to 1 on entry. Measure layout size,
+          // not the transformed box, or the canvas locks in 3.5% too large (wrong
+          // framing and shadows) and then jumps when something re-measures.
+          resize={{ offsetSize: true }}
         >
           <WebGLGuard />
-          <AdaptiveQuality min={isIOSDevice ? 0.75 : 1} max={maxDpr} />
+          <AdaptiveQuality min={isIOSDevice ? 0.75 : 1} max={maxDpr} active={props.entered ?? true} />
           <Suspense fallback={null}>
             <Scene {...props} />
           </Suspense>
