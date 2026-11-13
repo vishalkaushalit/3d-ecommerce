@@ -24,6 +24,7 @@ import { RailSim, type Hanger } from './railSim';
 import { createClothMotion, createClothUniforms, updateClothMotion } from './clothMotion';
 import { clampDelta } from './spring';
 import { AdaptiveQuality } from './AdaptiveQuality';
+import { isLowPowerDevice } from './device';
 
 export const positions = ['GK', 'DEF', 'MID', 'FWD'] as const;
 export const positionNames = {
@@ -75,6 +76,27 @@ function LoadingProgress({ onProgress }: { onProgress: (progress: number) => voi
   return null;
 }
 
+/**
+ * On phones, refresh the shadow maps every other frame. Each shadow-casting light
+ * re-draws the whole squad, so this halves most of the per-frame geometry work;
+ * the shadows are soft and the shirts move slowly, so the lag is not visible.
+ */
+function ThrottledShadows() {
+  const gl = useThree((state) => state.gl);
+  const frame = useRef(0);
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    return () => {
+      gl.shadowMap.autoUpdate = true;
+    };
+  }, [gl]);
+  useFrame(() => {
+    if (frame.current++ % 2 === 0) gl.shadowMap.needsUpdate = true;
+  });
+  return null;
+}
+
 function RoomLighting({
   selected,
   shadowsEnabled,
@@ -101,7 +123,7 @@ function RoomLighting({
       light.position.set(spot.pos[0], spot.pos[2], -spot.pos[1]);
       light.target.position.set(spot.target[0], spot.target[2], -spot.target[1]);
       light.castShadow = shadowsEnabled && index % 2 === 0;
-      light.shadow.mapSize.set(1536, 1536);
+      light.shadow.mapSize.setScalar(isLowPowerDevice ? 768 : 1536);
       light.shadow.bias = -0.0004;
       light.shadow.normalBias = 0.01;
       light.shadow.radius = 6;
@@ -143,7 +165,7 @@ function RoomLighting({
       intensity={0} distance={12} angle={MathUtils.degToRad(22)} penumbra={0.65} decay={2}
       color="#fff4e7"
       castShadow={shadowsEnabled}
-      shadow-mapSize={[2048, 2048]}
+      shadow-mapSize={isLowPowerDevice ? [1024, 1024] : [2048, 2048]}
       shadow-bias={-0.0003}
       shadow-normalBias={0.012}
       shadow-radius={4}
@@ -817,11 +839,12 @@ export default function ReferenceScene(props: SceneProps) {
         <Canvas
           shadows
           camera={{ position: [0, 1.5, 5.6], fov: 19.5 }}
-          dpr={[1, 2]}
+          dpr={isLowPowerDevice ? [1, 1.5] : [1, 2]}
           gl={{ antialias: true, alpha: true, localClippingEnabled: true, powerPreference: 'high-performance' }}
           fallback={fallback}
         >
-          <AdaptiveQuality min={1} max={2} />
+          <AdaptiveQuality min={1} max={isLowPowerDevice ? 1.5 : 2} />
+          {isLowPowerDevice && <ThrottledShadows />}
           <Suspense fallback={null}>
             <Scene {...props} />
           </Suspense>

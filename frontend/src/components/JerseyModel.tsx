@@ -15,19 +15,14 @@ import homeInnerUrl from '../../public/assets/home_inner.png';
 import gkInnerUrl from '../../public/assets/gk_inner.png';
 import type { Product } from '../../../shared/types';
 import { clothShader, type ClothUniforms } from './clothMotion';
+import { isLowPowerDevice } from './device';
 
 export const assetUrl = (file: string) =>
   `${(import.meta.env.VITE_ASSET_BASE_URL || '/assets').replace(/\/$/, '')}/${file}`;
 
 // Every jersey gets its own painted atlas. At the source 4096x2048 size that is
 // ~43 MB of GPU memory each (with mipmaps); a full squad on a phone exhausts GPU
-// memory and the uploads silently fail, rendering the shirts black. Phones and
-// tablets get a 2048-wide atlas, which is still sharp at their screen size.
-const isLowMemoryDevice = () =>
-  typeof window !== 'undefined' &&
-  (window.matchMedia?.('(pointer: coarse)').matches ||
-    ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 4);
-
+// memory and the uploads silently fail, rendering the shirts black.
 type ColorBin = { weight: number; red: number; green: number; blue: number };
 
 function getDominantDesignColor(images: CanvasImageSource[]): string | undefined {
@@ -93,7 +88,7 @@ export function JerseyModel({
   const maxTextureSize = useThree((state) => state.gl.capabilities.maxTextureSize);
   const { model, jersey, materials, texture } = useMemo(() => {
     const canvas = document.createElement('canvas');
-    const atlasLimit = Math.min(maxTextureSize, isLowMemoryDevice() ? 2048 : 4096);
+    const atlasLimit = Math.min(maxTextureSize, isLowPowerDevice ? 2048 : 4096);
     const atlasScale = Math.min(1, atlasLimit / Math.max(baseTexture.image.width, baseTexture.image.height));
     canvas.width = Math.round(baseTexture.image.width * atlasScale);
     canvas.height = Math.round(baseTexture.image.height * atlasScale);

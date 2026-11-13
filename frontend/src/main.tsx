@@ -13,14 +13,7 @@ import './styles.css';
 import './store-theme.css';
 function App() {
   const { loading, error, refresh } = useStore();
-  if (loading)
-    return (
-      <div className="app-loading" role="status" aria-live="polite">
-        <span className="wordmark">GARUDA®</span>
-        <span className="app-loading-spinner" aria-hidden="true" />
-        <p>Getting your colors ready…</p>
-      </div>
-    );
+  if (loading) return <div className="app-loading" aria-busy="true" />;
   if (error)
     return (
       <div className="empty-state">
