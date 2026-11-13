@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState, type RefObject } from 'react';
 import { useGLTF, useTexture } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import {
   CanvasTexture,
   Color,
@@ -17,6 +18,15 @@ import { clothShader, type ClothUniforms } from './clothMotion';
 
 export const assetUrl = (file: string) =>
   `${(import.meta.env.VITE_ASSET_BASE_URL || '/assets').replace(/\/$/, '')}/${file}`;
+
+// Every jersey gets its own painted atlas. At the source 4096x2048 size that is
+// ~43 MB of GPU memory each (with mipmaps); a full squad on a phone exhausts GPU
+// memory and the uploads silently fail, rendering the shirts black. Phones and
+// tablets get a 2048-wide atlas, which is still sharp at their screen size.
+const isLowMemoryDevice = () =>
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(pointer: coarse)').matches ||
+    ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 4);
 
 type ColorBin = { weight: number; red: number; green: number; blue: number };
 
@@ -80,12 +90,15 @@ export function JerseyModel({
     product.frontDesign || baseTextureUrl,
     product.backDesign || baseTextureUrl,
   ]);
+  const maxTextureSize = useThree((state) => state.gl.capabilities.maxTextureSize);
   const { model, jersey, materials, texture } = useMemo(() => {
     const canvas = document.createElement('canvas');
-    canvas.width = baseTexture.image.width;
-    canvas.height = baseTexture.image.height;
+    const atlasLimit = Math.min(maxTextureSize, isLowMemoryDevice() ? 2048 : 4096);
+    const atlasScale = Math.min(1, atlasLimit / Math.max(baseTexture.image.width, baseTexture.image.height));
+    canvas.width = Math.round(baseTexture.image.width * atlasScale);
+    canvas.height = Math.round(baseTexture.image.height * atlasScale);
     const context = canvas.getContext('2d')!;
-    context.drawImage(baseTexture.image, 0, 0);
+    context.drawImage(baseTexture.image, 0, 0, canvas.width, canvas.height);
     const originalColor = product.kit === 'gk' ? '#168a9c' : '#a72227';
     const designImages: CanvasImageSource[] = [];
     if (product.frontDesign) designImages.push(frontDesignTexture.image);
@@ -230,6 +243,7 @@ export function JerseyModel({
     product.number,
     product.player,
     fontReady,
+    maxTextureSize,
     clothRef,
     clothUniforms,
   ]);
